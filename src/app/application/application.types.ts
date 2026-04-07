@@ -27,8 +27,5 @@ export type ApplicationElements = {
   primaryButton: HTMLButtonElement;
   barometerValue: HTMLDivElement;
   stopwatchValue: HTMLDivElement;
-  valveControls: HTMLDivElement;
-  valveOpenButton: HTMLButtonElement;
-  valveCloseButton: HTMLButtonElement;
   dragGhost: HTMLDivElement;
 };

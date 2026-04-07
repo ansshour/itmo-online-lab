@@ -435,8 +435,13 @@ export class CanvasRenderer {
   }
 
   private drawValve(x: number, y: number, width: number, height: number, running: boolean, time: number, valvePosition: number): void {
-    const openness = this.normalize(valvePosition, 0, 9);
-    const wheelRotation = openness * (Math.PI / 1.8) + (running ? Math.sin(time / 480) * 0.05 : 0);
+    const minPosition = 0;
+    const maxPosition = 10;
+    const openness = this.normalize(valvePosition, minPosition, maxPosition);
+    const centerX = x + width * 0.5;
+    const centerY = y + height * 0.18;
+    const dialRadius = width * 0.24;
+    const pointerAngle = -Math.PI * 0.75 + openness * Math.PI * 1.5 + (running ? Math.sin(time / 480) * 0.03 : 0);
 
     this.context.fillStyle = '#64717a';
     this.context.fillRect(x, y + height * 0.46, width * 0.18, height * 0.08);
@@ -470,21 +475,46 @@ export class CanvasRenderer {
 
     this.context.strokeStyle = '#5f6c76';
     this.context.beginPath();
-    this.context.moveTo(x + width * 0.5, y + height * 0.18);
-    this.context.lineTo(x + width * 0.5, y + height * (0.4 - openness * 0.05));
+    this.context.moveTo(centerX, y + height * 0.24);
+    this.context.lineTo(centerX, y + height * (0.4 - openness * 0.05));
     this.context.stroke();
 
+    this.context.save();
+    this.context.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    this.context.strokeStyle = running ? '#8f5a06' : '#5f6c76';
+    this.context.lineWidth = 1.6;
     this.context.beginPath();
-    this.context.arc(x + width * 0.5, y + height * 0.12, width * 0.17, 0, Math.PI * 2);
+    this.context.arc(centerX, centerY, dialRadius, 0, Math.PI * 2);
+    this.context.fill();
     this.context.stroke();
-    this.context.beginPath();
-    for (let index = 0; index < 4; index += 1) {
-      const angle = wheelRotation + (Math.PI / 2) * index;
 
-      this.context.moveTo(x + width * 0.5 + Math.cos(angle) * width * 0.04, y + height * 0.12 + Math.sin(angle) * width * 0.04);
-      this.context.lineTo(x + width * 0.5 + Math.cos(angle) * width * 0.17, y + height * 0.12 + Math.sin(angle) * width * 0.17);
+    for (let index = minPosition; index <= maxPosition; index += 1) {
+      const ratio = index / maxPosition;
+      const angle = -Math.PI * 0.75 + ratio * Math.PI * 1.5;
+      const outerRadius = dialRadius - 1;
+      const innerRadius = index === valvePosition ? dialRadius * 0.48 : dialRadius * 0.64;
+
+      this.context.strokeStyle = index === valvePosition ? '#d59b35' : '#8e9aa0';
+      this.context.lineWidth = index === valvePosition ? 2.2 : 1.1;
+      this.context.beginPath();
+      this.context.moveTo(centerX + Math.cos(angle) * innerRadius, centerY + Math.sin(angle) * innerRadius);
+      this.context.lineTo(centerX + Math.cos(angle) * outerRadius, centerY + Math.sin(angle) * outerRadius);
+      this.context.stroke();
     }
+
+    this.context.strokeStyle = '#d59b35';
+    this.context.lineWidth = 2.4;
+    this.context.beginPath();
+    this.context.moveTo(centerX, centerY);
+    this.context.lineTo(centerX + Math.cos(pointerAngle) * dialRadius * 0.72, centerY + Math.sin(pointerAngle) * dialRadius * 0.72);
     this.context.stroke();
+    this.context.fillStyle = running ? '#d59b35' : '#7d878e';
+    this.context.beginPath();
+    this.context.arc(centerX, centerY, dialRadius * 0.16, 0, Math.PI * 2);
+    this.context.fill();
+    this.context.restore();
+
+    this.measure({ x: centerX, y: y - 2 }, `Положение ${valvePosition}/10`, ['top']);
   }
 
   private drawFlowmeter(x: number, y: number, width: number, height: number, running: boolean, time: number, volume: number): void {
@@ -645,7 +675,7 @@ export class CanvasRenderer {
 
     if (renderValues && state.snapshot.measurements && item.kind === 'flowmeter') {
       const point = this.grid.point({ tileX: item.tileX + Math.floor(item.tileWidth / 2), tileY: item.tileY });
-      const value = `${state.snapshot.measurements.volume.toFixed(3)} м³/с`;
+      const value = `${state.snapshot.measurements.volume.toFixed(6)} м³/с`;
 
       this.measure(point, value, ['top', 'right', 'left', 'bottom']);
     }

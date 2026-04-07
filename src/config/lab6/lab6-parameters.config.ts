@@ -1,6 +1,6 @@
 import type { Lab6ParameterRow } from './lab6-parameters.types';
 
-export const LAB6_SUBVARIANTS_COUNT = 10;
+export const LAB6_SUBVARIANTS_COUNT = 11;
 
 export const LAB6_PARAMETERS: Lab6ParameterRow[][] = [
   [
@@ -14,6 +14,7 @@ export const LAB6_PARAMETERS: Lab6ParameterRow[][] = [
     { B: 758, p1: 312.0, t1: 20, b: 0.487, D: 0.00095 },
     { B: 758, p1: 312.0, t1: 20, b: 0.426, D: 0.00095 },
     { B: 758, p1: 312.0, t1: 20, b: 0.366, D: 0.00095 },
+    { B: 758, p1: 312.0, t1: 20, b: 0.305, D: 0.00095 },
   ],
   [
     { B: 758, p1: 296.0, t1: 20, b: 1.0, D: 0.0008 },
@@ -26,5 +27,6 @@ export const LAB6_PARAMETERS: Lab6ParameterRow[][] = [
     { B: 758, p1: 296.0, t1: 20, b: 0.472, D: 0.0008 },
     { B: 758, p1: 296.0, t1: 20, b: 0.398, D: 0.0008 },
     { B: 758, p1: 296.0, t1: 20, b: 0.332, D: 0.0008 },
+    { B: 758, p1: 296.0, t1: 20, b: 0.244, D: 0.0008 },
   ],
 ];

@@ -66,8 +66,7 @@ body {
 
 .application__toolbar-button,
 .application__primary-button,
-.application__palette-item,
-.application__valve-button {
+.application__palette-item {
   border: 1px solid #aab1b4;
   background: linear-gradient(180deg, #ffffff 0%, #edf0f1 100%);
   border-radius: 12px;
@@ -75,8 +74,7 @@ body {
   cursor: pointer;
 }
 
-.application__toolbar-button,
-.application__valve-button {
+.application__toolbar-button {
   padding: 10px 14px;
   font-size: 14px;
 }
@@ -160,11 +158,6 @@ body {
 .application__widget-value {
   font-size: 26px;
   font-weight: 700;
-}
-
-.application__valve-controls {
-  display: flex;
-  gap: 10px;
 }
 
 .application__drag-ghost {

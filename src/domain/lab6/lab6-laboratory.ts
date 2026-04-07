@@ -301,6 +301,10 @@ export class Lab6Laboratory {
 
     const seconds = Math.max(0, Math.floor((now - this.startedAt) / 1000));
 
+    if (this.measurements.updatedAtSeconds === seconds) {
+      return;
+    }
+
     this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, seconds);
   }
 
@@ -309,7 +313,10 @@ export class Lab6Laboratory {
       return;
     }
 
-    const next = Math.min(Math.max(this.valvePosition + step, LAB6_NUMBERS.closedValvePosition), LAB6_NUMBERS.openedValvePosition);
+    const range = LAB6_NUMBERS.openedValvePosition - LAB6_NUMBERS.closedValvePosition + 1;
+    const normalizedStep = ((step % range) + range) % range;
+    const next =
+      ((this.valvePosition - LAB6_NUMBERS.closedValvePosition + normalizedStep) % range) + LAB6_NUMBERS.closedValvePosition;
 
     this.valvePosition = next;
 

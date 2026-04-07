@@ -7,4 +7,5 @@ export type Lab6Measurements = {
   volume: number;
   valvePosition: number;
   stopwatchSeconds: number;
+  updatedAtSeconds: number;
 };

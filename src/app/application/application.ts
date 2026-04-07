@@ -70,7 +70,6 @@ export class Application {
     this.bindPrimary();
     this.bindCanvas();
     this.bindWindow();
-    this.bindValve();
   }
 
   private bindPrimary(): void {
@@ -132,6 +131,20 @@ export class Application {
           this.selectedConnectionId = connection.id;
           this.selectedItemId = '';
           this.connectionPreview = null;
+          this.refresh();
+
+          return;
+        }
+      }
+
+      if (stage === 'running') {
+        const item = this.laboratory.item(point);
+
+        if (item?.kind === 'valve') {
+          this.selectedItemId = item.id;
+          this.selectedConnectionId = '';
+          this.connectionPreview = null;
+          this.laboratory.valve(APPLICATION_NUMBERS.valveStep);
           this.refresh();
 
           return;
@@ -309,18 +322,6 @@ export class Application {
     });
   }
 
-  private bindValve(): void {
-    this.elements.valveOpenButton.addEventListener('click', () => {
-      this.laboratory.valve(APPLICATION_NUMBERS.valveStep);
-      this.refresh();
-    });
-
-    this.elements.valveCloseButton.addEventListener('click', () => {
-      this.laboratory.valve(-APPLICATION_NUMBERS.valveStep);
-      this.refresh();
-    });
-  }
-
   private loop(): void {
     this.laboratory.tick(performance.now());
     this.refresh();
@@ -340,8 +341,6 @@ export class Application {
     this.elements.stopwatchValue.textContent = snapshot.measurements
       ? snapshot.measurements.stopwatchSeconds.toString().padStart(2, '0')
       : '00';
-    this.elements.valveControls.hidden = snapshot.stage !== 'running';
-
     this.palette(snapshot);
     this.renderer.render({
       snapshot,
@@ -463,9 +462,6 @@ export class Application {
     const primaryButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="primary-button"]');
     const barometerValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="barometer-value"]');
     const stopwatchValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="stopwatch-value"]');
-    const valveControls = this.rootElement.querySelector<HTMLDivElement>('[data-element="valve-controls"]');
-    const valveOpenButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="valve-open"]');
-    const valveCloseButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="valve-close"]');
     const dragGhost = this.rootElement.querySelector<HTMLDivElement>('[data-element="drag-ghost"]');
 
     if (
@@ -477,9 +473,6 @@ export class Application {
       !primaryButton ||
       !barometerValue ||
       !stopwatchValue ||
-      !valveControls ||
-      !valveOpenButton ||
-      !valveCloseButton ||
       !dragGhost
     ) {
       throw new Error('Application layout is incomplete.');
@@ -494,9 +487,6 @@ export class Application {
       primaryButton,
       barometerValue,
       stopwatchValue,
-      valveControls,
-      valveOpenButton,
-      valveCloseButton,
       dragGhost,
     };
   }
@@ -531,10 +521,6 @@ export class Application {
             <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.stopwatch}</div>
             <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="stopwatch-value"></div>
           </section>
-          <section class="${APPLICATION_CLASS_NAMES.valveControls}" data-element="valve-controls" hidden>
-            <button class="${APPLICATION_CLASS_NAMES.valveButton}" data-element="valve-close" type="button">${APPLICATION_LABELS.valveClose}</button>
-            <button class="${APPLICATION_CLASS_NAMES.valveButton}" data-element="valve-open" type="button">${APPLICATION_LABELS.valveOpen}</button>
-          </section>
         </aside>
         <div class="${APPLICATION_CLASS_NAMES.dragGhost}" data-element="drag-ghost"></div>
       </div>
@@ -562,7 +548,7 @@ export class Application {
       return 'Перенесите датчики на валидные точки камер.';
     }
 
-    return 'Показания обновляются по формулам Lab6.';
+    return '';
   }
 
   private label(kind: EquipmentKind | SensorKind): string {

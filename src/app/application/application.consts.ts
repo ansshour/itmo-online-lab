@@ -19,8 +19,6 @@ export const APPLICATION_CLASS_NAMES = {
   widgetLabel: 'application__widget-label',
   status: 'application__status',
   dragGhost: 'application__drag-ghost',
-  valveControls: 'application__valve-controls',
-  valveButton: 'application__valve-button',
 } as const;
 
 export const APPLICATION_LABELS = {
@@ -34,8 +32,6 @@ export const APPLICATION_LABELS = {
   deleteMode: 'Удаление',
   barometer: 'Барометр',
   stopwatch: 'Секундомер',
-  valveOpen: 'Открыть',
-  valveClose: 'Закрыть',
   initialStatus: 'Соберите схему Lab6 и подтвердите переход к датчикам.',
 } as const;
 

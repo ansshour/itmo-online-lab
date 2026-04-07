@@ -43,6 +43,7 @@ export class Lab6Physics {
       volume: volumeVaried,
       valvePosition: safePosition,
       stopwatchSeconds,
+      updatedAtSeconds: stopwatchSeconds,
     };
   }
 

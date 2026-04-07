@@ -16,7 +16,7 @@ export const LAB6_STATUS_LABELS = {
 export const LAB6_NUMBERS = {
   firstIdentifier: 1,
   closedValvePosition: 0,
-  openedValvePosition: 9,
+  openedValvePosition: 10,
   graphEndDegree: 1,
   graphMiddleDegree: 2,
   requiredSensorCountPerKind: 2,
