@@ -42,7 +42,6 @@ export type ApplicationElements = {
   modalResultsChart: HTMLDivElement;
   primaryButton: HTMLButtonElement;
   barometerValue: HTMLDivElement;
-  stopwatchValue: HTMLDivElement;
   toastStack: HTMLDivElement;
   dragGhost: HTMLDivElement;
 };

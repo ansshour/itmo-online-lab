@@ -539,12 +539,14 @@ export class Lab6Laboratory {
     }
 
     if (this.stage === 'instruments') {
-      return Object.values(this.config.sensors).map((definition) => ({
-        kind: definition.kind,
-        label: definition.label,
-        remaining: this.remainingSensor(definition.kind),
-        category: 'sensor',
-      }));
+      return Object.values(this.config.sensors)
+        .filter((definition) => definition.maxCount > 0)
+        .map((definition) => ({
+          kind: definition.kind,
+          label: definition.label,
+          remaining: this.remainingSensor(definition.kind),
+          category: 'sensor',
+        }));
     }
 
     return [];

@@ -53,7 +53,6 @@ export const APPLICATION_LABELS = {
   closeResults: 'Закрыть',
   gasLabel: 'Рабочий газ',
   barometer: 'Барометр',
-  stopwatch: 'Секундомер',
   captureMeasurement: 'Снять измерение',
   measurementsTable: 'Таблица измерений',
   velocityChart: 'График скорости от p2abs/p1abs',

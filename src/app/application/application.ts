@@ -431,9 +431,6 @@ export class Application {
     this.elements.barometerValue.textContent = snapshot.measurements
       ? `${snapshot.measurements.barometer.toFixed(0)} ${APPLICATION_TEXTS.barometerUnit}`
       : `0 ${APPLICATION_TEXTS.barometerUnit}`;
-    this.elements.stopwatchValue.textContent = snapshot.measurements
-      ? snapshot.measurements.stopwatchSeconds.toString().padStart(2, '0')
-      : '00';
     this.elements.runtimePanel.hidden = !running;
     this.elements.sidebarList.hidden = running;
     this.elements.resultsPreview.hidden = !running;
@@ -589,7 +586,6 @@ export class Application {
     const modalResultsChart = this.rootElement.querySelector<HTMLDivElement>('[data-element="modal-results-chart"]');
     const primaryButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="primary-button"]');
     const barometerValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="barometer-value"]');
-    const stopwatchValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="stopwatch-value"]');
     const toastStack = this.rootElement.querySelector<HTMLDivElement>('[data-element="toast-stack"]');
     const dragGhost = this.rootElement.querySelector<HTMLDivElement>('[data-element="drag-ghost"]');
 
@@ -612,7 +608,6 @@ export class Application {
       !modalResultsChart ||
       !primaryButton ||
       !barometerValue ||
-      !stopwatchValue ||
       !toastStack ||
       !dragGhost
     ) {
@@ -638,7 +633,6 @@ export class Application {
       modalResultsChart,
       primaryButton,
       barometerValue,
-      stopwatchValue,
       toastStack,
       dragGhost,
     };
@@ -671,10 +665,6 @@ export class Application {
             <section class="${APPLICATION_CLASS_NAMES.widget}">
               <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.barometer}</div>
               <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="barometer-value"></div>
-            </section>
-            <section class="${APPLICATION_CLASS_NAMES.widget}">
-              <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.stopwatch}</div>
-              <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="stopwatch-value"></div>
             </section>
             <div class="${APPLICATION_CLASS_NAMES.runtimeActions}">
               <button class="${APPLICATION_CLASS_NAMES.secondaryButton}" data-element="capture-button" type="button">${APPLICATION_LABELS.captureMeasurement}</button>
