@@ -281,6 +281,7 @@ export class CanvasRenderer {
     const vesselHeight = height * 0.56;
     const vesselRadius = vesselHeight * 0.45;
     const pulse = running ? (Math.sin(time / 420) + 1) / 2 : 0.3;
+    const outletPulse = running ? (Math.sin(time / 180) + 1) / 2 : 0;
 
     this.roundedRect(vesselX, vesselY, width * 0.92, vesselHeight, vesselRadius);
     this.context.fillStyle = this.linearGradient(vesselX, vesselY, vesselX + width, vesselY + vesselHeight, ['#f9fbfc', '#d9e1e5', '#c4ced4', '#eef2f4']);
@@ -305,12 +306,62 @@ export class CanvasRenderer {
     this.context.lineTo(x + width * 0.82, y + height * 0.5);
     this.context.stroke();
 
+    this.context.save();
+    this.context.fillStyle = '#5f6f79';
+    this.context.beginPath();
+    this.context.arc(x + width * 0.5, y + height * 0.5, height * 0.06, 0, Math.PI * 2);
+    this.context.fill();
+    this.context.restore();
+
+    if (running) {
+      const outletX = x + width * 0.43;
+      const outletY = y + height * 0.06;
+      const jetHeight = height * (0.12 + outletPulse * 0.16);
+      const jetWidth = width * (0.06 + outletPulse * 0.03);
+
+      this.context.save();
+      this.context.fillStyle = `rgba(111, 201, 255, ${0.18 + outletPulse * 0.18})`;
+      this.context.beginPath();
+      this.context.moveTo(outletX - jetWidth * 0.5, outletY);
+      this.context.quadraticCurveTo(outletX - jetWidth, outletY - jetHeight * 0.45, outletX, outletY - jetHeight);
+      this.context.quadraticCurveTo(outletX + jetWidth, outletY - jetHeight * 0.45, outletX + jetWidth * 0.5, outletY);
+      this.context.closePath();
+      this.context.fill();
+
+      this.context.strokeStyle = `rgba(255, 255, 255, ${0.2 + outletPulse * 0.22})`;
+      this.context.lineWidth = 1.1;
+      this.context.beginPath();
+      this.context.moveTo(outletX, outletY - jetHeight * 0.08);
+      this.context.quadraticCurveTo(outletX + jetWidth * 0.18, outletY - jetHeight * 0.42, outletX, outletY - jetHeight * 0.82);
+      this.context.stroke();
+      this.context.restore();
+    }
+
     this.context.fillStyle = '#75838d';
     this.context.fillRect(x + width * 0.2, y + height * 0.78, width * 0.1, height * 0.12);
     this.context.fillRect(x + width * 0.68, y + height * 0.78, width * 0.1, height * 0.12);
     this.context.fillStyle = '#51606b';
     this.context.fillRect(x + width * 0.34, y + height * 0.12, width * 0.08, height * 0.1);
     this.context.fillRect(x + width * 0.42, y + height * 0.06, width * 0.02, height * 0.08);
+
+    if (running) {
+      const gaugeX = x + width * 0.38;
+      const gaugeY = y + height * 0.08;
+      const gaugeWidth = width * 0.18;
+      const gaugeHeight = height * 0.06;
+
+      this.context.save();
+      this.roundedRect(gaugeX, gaugeY, gaugeWidth, gaugeHeight, gaugeHeight * 0.45);
+      this.context.fillStyle = 'rgba(236, 244, 247, 0.95)';
+      this.context.fill();
+      this.context.strokeStyle = 'rgba(92, 111, 121, 0.35)';
+      this.context.lineWidth = 1;
+      this.context.stroke();
+      this.context.fillStyle = `rgba(31, 122, 106, ${0.45 + pulse * 0.35})`;
+      this.roundedRect(gaugeX + 1.5, gaugeY + 1.5, (gaugeWidth - 3) * (0.72 + pulse * 0.18), gaugeHeight - 3, gaugeHeight * 0.35);
+      this.context.fill();
+      this.context.restore();
+    }
   }
 
   private drawChamber(
