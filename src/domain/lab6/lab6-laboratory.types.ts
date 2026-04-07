@@ -49,3 +49,16 @@ export type ValidationResult = {
   valid: boolean;
   message: string;
 };
+
+export type ConnectionFailureReason = 'stage' | 'self' | 'duplicate' | 'portBusy' | 'invalidTarget' | 'invalidRoute';
+
+export type SensorInstallFailureReason = 'stage' | 'limit' | 'wrongPoint' | 'wrongSensorType' | 'occupied';
+
+export type InteractionResult<TReason extends string> =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      reason: TReason;
+    };

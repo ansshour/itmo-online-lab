@@ -23,9 +23,13 @@ export type ApplicationElements = {
   sidebarHeader: HTMLHeadingElement;
   sidebarCaption: HTMLParagraphElement;
   sidebarList: HTMLDivElement;
-  status: HTMLParagraphElement;
+  runtimePanel: HTMLDivElement;
   primaryButton: HTMLButtonElement;
   barometerValue: HTMLDivElement;
   stopwatchValue: HTMLDivElement;
+  valveControls: HTMLDivElement;
+  valveOpenButton: HTMLButtonElement;
+  valveCloseButton: HTMLButtonElement;
+  toastStack: HTMLDivElement;
   dragGhost: HTMLDivElement;
 };
