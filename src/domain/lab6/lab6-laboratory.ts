@@ -127,14 +127,16 @@ export class Lab6Laboratory {
       tileY: point.tileY,
     };
 
+    if (current.tileX === moved.tileX && current.tileY === moved.tileY) {
+      return true;
+    }
+
     if (!this.grid.fit(moved) || this.collides(moved, identifier)) {
       return false;
     }
 
     this.items = this.items.map((item) => (item.id === identifier ? moved : item));
-    this.connections = this.connections
-      .filter((connection) => connection.from.equipmentId !== identifier && connection.to.equipmentId !== identifier)
-      .map((connection) => this.route(connection));
+    this.connections = this.connections.map((connection) => this.route(connection));
 
     return true;
   }
