@@ -24,6 +24,8 @@ export class Lab6Physics {
     const pressureLow = this.relative(pressureLowAbsoluteVaried, row.B);
     const pressureHighDisplay = pressureHighAbsoluteVaried / 100;
     const pressureLowDisplay = pressureLowAbsoluteVaried / 100;
+    const pressureRatio = pressureLowAbsolute / Math.max(pressureHighAbsolute, this.epsilon);
+    const velocity = this.velocity(volume, row.D);
     const volumeVaried = this.vary(volume, 3, 3);
 
     return {
@@ -32,6 +34,10 @@ export class Lab6Physics {
       pressureLow,
       pressureHighDisplay,
       pressureLowDisplay,
+      pressureHighAbsolute: pressureHighAbsoluteVaried,
+      pressureLowAbsolute: pressureLowAbsoluteVaried,
+      pressureRatio,
+      velocity,
       volume: volumeVaried,
       gasId: gas.id,
       gasLabel: gas.label,
@@ -76,6 +82,12 @@ export class Lab6Physics {
     }
 
     return Math.sqrt(((2 * gas.adiabaticIndex) / (gas.adiabaticIndex - 1)) * effectiveGasConstant * referenceTemperature) * area;
+  }
+
+  private velocity(volume: number, diameter: number): number {
+    const area = (Math.PI * diameter * diameter) / 4;
+
+    return volume / Math.max(area, this.epsilon);
   }
 
   private criticalRatio(adiabaticIndex: number): number {

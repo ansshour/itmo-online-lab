@@ -17,7 +17,7 @@ import type {
   SensorInstallFailureReason,
   ValidationResult,
 } from './lab6-laboratory.types';
-import type { Lab6Measurements } from './lab6-measurements.types';
+import type { Lab6MeasurementRecord, Lab6Measurements } from './lab6-measurements.types';
 
 export class Lab6Laboratory {
   private readonly config = LAB6_CONFIG;
@@ -50,6 +50,8 @@ export class Lab6Laboratory {
 
   private selectedGasId: string;
 
+  private measurementRecords: Lab6MeasurementRecord[];
+
   public constructor() {
     this.grid = new Grid(
       this.config.gridTileSize,
@@ -71,6 +73,7 @@ export class Lab6Laboratory {
     this.valvePosition = LAB6_NUMBERS.closedValvePosition;
     this.startedAt = 0;
     this.selectedGasId = LAB6_DEFAULT_GAS_ID;
+    this.measurementRecords = [];
   }
 
   public snapshot(): LaboratorySnapshot {
@@ -79,6 +82,7 @@ export class Lab6Laboratory {
       items: [...this.items],
       connections: [...this.connections],
       measurements: this.measurements,
+      measurementRecords: [...this.measurementRecords],
       selectedGasId: this.selectedGasId,
       gasOptions: LAB6_GASES.map((gas) => ({ id: gas.id, label: gas.label, model: gas.model })),
       status: this.status,
@@ -93,6 +97,24 @@ export class Lab6Laboratory {
 
   public stageValue(): LaboratoryStage {
     return this.stage;
+  }
+
+  public captureMeasurement(): void {
+    if (!this.measurements) {
+      return;
+    }
+
+    this.measurementRecords = [
+      ...this.measurementRecords,
+      {
+        index: this.measurementRecords.length + 1,
+        pressureHighBar: this.measurements.pressureHighDisplay,
+        pressureLowBar: this.measurements.pressureLowDisplay,
+        flowLitersPerMinute: this.measurements.volume * 1000 * 60,
+        pressureRatio: this.measurements.pressureRatio,
+        velocity: this.measurements.velocity,
+      },
+    ];
   }
 
   public setGas(gasId: string): void {
@@ -342,6 +364,7 @@ export class Lab6Laboratory {
       this.variantIndex = this.physics.choose();
       this.valvePosition = LAB6_NUMBERS.closedValvePosition;
       this.startedAt = now;
+      this.measurementRecords = [];
       this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, 0, this.selectedGasId);
       this.status = validation.message;
 
@@ -350,6 +373,7 @@ export class Lab6Laboratory {
 
     this.stage = 'assembly';
     this.measurements = null;
+    this.measurementRecords = [];
     this.startedAt = 0;
     this.status = LAB6_STATUS_LABELS.runningStopped;
 

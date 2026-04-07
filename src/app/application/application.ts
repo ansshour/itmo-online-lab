@@ -11,7 +11,7 @@ import type { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
 import type { GridPoint, PixelPoint } from '../../domain/grid/grid.types';
 import { LAB6_GASES } from '../../domain/lab6/lab6-gases';
 import { Lab6Laboratory } from '../../domain/lab6/lab6-laboratory';
-import type { ConnectionFailureReason, EquipmentPlacement, SensorInstallFailureReason } from '../../domain/lab6/lab6-laboratory.types';
+import type { ConnectionFailureReason, SensorInstallFailureReason } from '../../domain/lab6/lab6-laboratory.types';
 import { CanvasRenderer } from '../../rendering/canvas/canvas-renderer';
 import type { ConnectionPreview, PlacementPreview, SensorPreview } from '../../rendering/canvas/canvas-renderer.types';
 
@@ -63,6 +63,8 @@ export class Application {
 
   private readonly leavingToastIds: Set<number>;
 
+  private resultsModalOpen: boolean;
+
   public constructor(rootElement: HTMLDivElement) {
     this.rootElement = rootElement;
     this.rootElement.innerHTML = this.template();
@@ -85,6 +87,7 @@ export class Application {
     this.toastIdentifier = 1;
     this.toastNodes = new Map();
     this.leavingToastIds = new Set();
+    this.resultsModalOpen = false;
   }
 
   public start(): void {
@@ -96,6 +99,8 @@ export class Application {
   private bind(): void {
     this.bindPrimary();
     this.bindGasSelection();
+    this.bindCaptureMeasurement();
+    this.bindResultsModal();
     this.bindCanvas();
     this.bindWindow();
   }
@@ -116,6 +121,30 @@ export class Application {
   private bindGasSelection(): void {
     this.elements.gasSelect.addEventListener('change', () => {
       this.laboratory.setGas(this.elements.gasSelect.value);
+      this.refresh();
+    });
+  }
+
+  private bindCaptureMeasurement(): void {
+    this.elements.captureButton.addEventListener('click', () => {
+      this.laboratory.captureMeasurement();
+      this.refresh();
+    });
+  }
+
+  private bindResultsModal(): void {
+    this.elements.resultsPreviewButton.addEventListener('click', () => {
+      this.resultsModalOpen = true;
+      this.refresh();
+    });
+
+    this.elements.resultsModalClose.addEventListener('click', () => {
+      this.resultsModalOpen = false;
+      this.refresh();
+    });
+
+    this.elements.resultsModalBackdrop.addEventListener('click', () => {
+      this.resultsModalOpen = false;
       this.refresh();
     });
   }
@@ -182,15 +211,13 @@ export class Application {
         const item = this.laboratory.item(point);
 
         if (item?.kind === 'valve') {
-          this.valveDrag = {
-            equipmentId: item.id,
-            pointerId: event.pointerId,
-          };
+          const currentPosition = this.laboratory.snapshot().measurements?.valvePosition ?? 0;
+          const nextPosition = (currentPosition + 1) % 11;
+
+          this.laboratory.setValvePosition(nextPosition);
           this.selectedItemId = item.id;
           this.selectedConnectionId = '';
           this.connectionPreview = null;
-          this.elements.canvas.setPointerCapture(event.pointerId);
-          this.updateValveFromPointer(item, event);
           this.refresh();
 
           return;
@@ -204,20 +231,6 @@ export class Application {
     });
 
     this.elements.canvas.addEventListener('pointermove', (event) => {
-      if (this.valveDrag) {
-        const item = this.laboratory.snapshot().items.find((entry) => entry.id === this.valveDrag?.equipmentId) ?? null;
-
-        this.hoveredPort = null;
-        this.hoveredItemId = item?.id ?? '';
-
-        if (item) {
-          this.updateValveFromPointer(item, event);
-        }
-
-        this.refresh();
-
-        return;
-      }
 
       const point = this.gridPoint(event);
       const hovered = this.laboratory.item(point);
@@ -268,17 +281,6 @@ export class Application {
         return;
       }
 
-      if (this.valveDrag && event.pointerId === this.valveDrag.pointerId) {
-        if (this.elements.canvas.hasPointerCapture(event.pointerId)) {
-          this.elements.canvas.releasePointerCapture(event.pointerId);
-        }
-
-        this.valveDrag = null;
-        this.clearSelection();
-        this.refresh();
-
-        return;
-      }
 
       const point = this.gridPoint(event);
       const stage = this.laboratory.stageValue();
@@ -434,7 +436,11 @@ export class Application {
       : '00';
     this.elements.runtimePanel.hidden = !running;
     this.elements.sidebarList.hidden = running;
+    this.elements.resultsPreview.hidden = !running;
+    this.elements.resultsModal.hidden = !running || !this.resultsModalOpen;
     this.palette(snapshot);
+    this.renderResultsPreview(snapshot);
+    this.renderResultsModal(snapshot);
     this.renderToasts();
     this.renderer.render({
       snapshot,
@@ -572,6 +578,15 @@ export class Application {
     const gasSelect = this.rootElement.querySelector<HTMLSelectElement>('[data-element="gas-select"]');
     const gasHint = this.rootElement.querySelector<HTMLParagraphElement>('[data-element="gas-hint"]');
     const runtimePanel = this.rootElement.querySelector<HTMLDivElement>('[data-element="runtime-panel"]');
+    const captureButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="capture-button"]');
+    const resultsPreview = this.rootElement.querySelector<HTMLDivElement>('[data-element="results-preview"]');
+    const resultsPreviewButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="results-preview-button"]');
+    const resultsPanel = this.rootElement.querySelector<HTMLDivElement>('[data-element="results-panel"]');
+    const resultsModal = this.rootElement.querySelector<HTMLDivElement>('[data-element="results-modal"]');
+    const resultsModalBackdrop = this.rootElement.querySelector<HTMLDivElement>('[data-element="results-modal-backdrop"]');
+    const resultsModalClose = this.rootElement.querySelector<HTMLButtonElement>('[data-element="results-modal-close"]');
+    const modalResultsTable = this.rootElement.querySelector<HTMLDivElement>('[data-element="modal-results-table"]');
+    const modalResultsChart = this.rootElement.querySelector<HTMLDivElement>('[data-element="modal-results-chart"]');
     const primaryButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="primary-button"]');
     const barometerValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="barometer-value"]');
     const stopwatchValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="stopwatch-value"]');
@@ -586,6 +601,15 @@ export class Application {
       !gasSelect ||
       !gasHint ||
       !runtimePanel ||
+      !captureButton ||
+      !resultsPreview ||
+      !resultsPreviewButton ||
+      !resultsPanel ||
+      !resultsModal ||
+      !resultsModalBackdrop ||
+      !resultsModalClose ||
+      !modalResultsTable ||
+      !modalResultsChart ||
       !primaryButton ||
       !barometerValue ||
       !stopwatchValue ||
@@ -603,6 +627,15 @@ export class Application {
       gasSelect,
       gasHint,
       runtimePanel,
+      captureButton,
+      resultsPreview,
+      resultsPreviewButton,
+      resultsPanel,
+      resultsModal,
+      resultsModalBackdrop,
+      resultsModalClose,
+      modalResultsTable,
+      modalResultsChart,
       primaryButton,
       barometerValue,
       stopwatchValue,
@@ -643,8 +676,34 @@ export class Application {
               <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.stopwatch}</div>
               <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="stopwatch-value"></div>
             </section>
+            <div class="${APPLICATION_CLASS_NAMES.runtimeActions}">
+              <button class="${APPLICATION_CLASS_NAMES.secondaryButton}" data-element="capture-button" type="button">${APPLICATION_LABELS.captureMeasurement}</button>
+            </div>
+          </div>
+          <div class="${APPLICATION_CLASS_NAMES.resultsPreview}" data-element="results-preview" hidden>
+            <div class="${APPLICATION_CLASS_NAMES.resultsPanel}" data-element="results-panel"></div>
+            <button class="${APPLICATION_CLASS_NAMES.resultsPreviewButton}" data-element="results-preview-button" type="button">${APPLICATION_LABELS.openResults}</button>
           </div>
         </aside>
+        <div class="${APPLICATION_CLASS_NAMES.modal}" data-element="results-modal" hidden>
+          <div class="${APPLICATION_CLASS_NAMES.modalBackdrop}" data-element="results-modal-backdrop"></div>
+          <div class="${APPLICATION_CLASS_NAMES.modalDialog}" role="dialog" aria-modal="true" aria-label="${APPLICATION_LABELS.resultsPanel}">
+            <div class="${APPLICATION_CLASS_NAMES.modalHeader}">
+              <h2 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.resultsPanel}</h2>
+              <button class="${APPLICATION_CLASS_NAMES.modalClose}" data-element="results-modal-close" type="button">${APPLICATION_LABELS.closeResults}</button>
+            </div>
+            <div class="${APPLICATION_CLASS_NAMES.modalBody}">
+              <section class="${APPLICATION_CLASS_NAMES.resultsSection}">
+                <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.measurementsTable}</h3>
+                <div class="${APPLICATION_CLASS_NAMES.resultsTable}" data-element="modal-results-table"></div>
+              </section>
+              <section class="${APPLICATION_CLASS_NAMES.resultsSection}">
+                <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.velocityChart}</h3>
+                <div class="${APPLICATION_CLASS_NAMES.chart}" data-element="modal-results-chart"></div>
+              </section>
+            </div>
+          </div>
+        </div>
         <div class="${APPLICATION_CLASS_NAMES.toastStack}" data-element="toast-stack"></div>
         <div class="${APPLICATION_CLASS_NAMES.dragGhost}" data-element="drag-ghost"></div>
       </div>
@@ -766,6 +825,154 @@ export class Application {
     }
   }
 
+  private renderResultsPreview(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
+    const records = snapshot.measurementRecords;
+    const previewRecords = records.slice(-4);
+
+    this.elements.resultsPanel.innerHTML = `
+      <section class="${APPLICATION_CLASS_NAMES.resultsSection}">
+        <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.measurementsTable}</h3>
+        <div class="${APPLICATION_CLASS_NAMES.resultsTable}" data-element="results-table">${this.resultsTableMarkup(previewRecords)}</div>
+      </section>
+      <section class="${APPLICATION_CLASS_NAMES.resultsSection}">
+        <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.velocityChart}</h3>
+        <div class="${APPLICATION_CLASS_NAMES.chart}" data-element="results-chart">${this.resultsChartMarkup(previewRecords, true)}</div>
+      </section>
+    `;
+  }
+
+  private renderResultsModal(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
+    const records = snapshot.measurementRecords;
+
+    this.elements.modalResultsTable.innerHTML = this.resultsTableMarkup(records);
+    this.elements.modalResultsChart.innerHTML = this.resultsChartMarkup(records, false);
+  }
+
+  private resultsTableMarkup(records: ReturnType<Lab6Laboratory['snapshot']>['measurementRecords']): string {
+    if (records.length === 0) {
+      return `<div class="${APPLICATION_CLASS_NAMES.chartEmpty}">${APPLICATION_LABELS.emptyMeasurements}</div>`;
+    }
+
+    return `
+      <table>
+        <thead>
+          <tr>
+            <th>№</th>
+            <th>p1, бар</th>
+            <th>p2, бар</th>
+            <th>Q, л/м</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${records
+            .map(
+              (record) => `
+                <tr>
+                  <td>${record.index}</td>
+                  <td>${record.pressureHighBar.toFixed(2)}</td>
+                  <td>${record.pressureLowBar.toFixed(2)}</td>
+                  <td>${record.flowLitersPerMinute.toFixed(2)}</td>
+                </tr>
+              `,
+            )
+            .join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  private resultsChartMarkup(
+    records: ReturnType<Lab6Laboratory['snapshot']>['measurementRecords'],
+    compact: boolean,
+  ): string {
+    if (records.length === 0) {
+      return `<div class="${APPLICATION_CLASS_NAMES.chartEmpty}">${APPLICATION_LABELS.emptyMeasurements}</div>`;
+    }
+
+    const sorted = [...records].sort((left, right) => left.pressureRatio - right.pressureRatio);
+    const width = compact ? 320 : 640;
+    const height = compact ? 180 : 320;
+    const paddingLeft = compact ? 24 : 56;
+    const paddingRight = compact ? 24 : 28;
+    const paddingTop = compact ? 24 : 28;
+    const paddingBottom = compact ? 24 : 44;
+    const plotWidth = width - paddingLeft - paddingRight;
+    const plotHeight = height - paddingTop - paddingBottom;
+    const minX = Math.min(...sorted.map((record) => record.pressureRatio));
+    const maxX = Math.max(...sorted.map((record) => record.pressureRatio));
+    const minY = Math.min(...sorted.map((record) => record.velocity));
+    const maxY = Math.max(...sorted.map((record) => record.velocity));
+    const axisY = height - paddingBottom;
+    const axisX = paddingLeft;
+    const pointRadius = compact ? 4 : 5;
+    const strokeWidth = compact ? 3 : 4;
+    const labelFontSize = compact ? 11 : 14;
+    const tickFontSize = compact ? 10 : 12;
+    const xTicks = 5 as number;
+    const yTicks = 5 as number;
+
+    const coordinates = sorted.map((record) => {
+      const x = paddingLeft + ((record.pressureRatio - minX) / Math.max(maxX - minX, 1e-6)) * plotWidth;
+      const y = axisY - ((record.velocity - minY) / Math.max(maxY - minY, 1e-6)) * plotHeight;
+
+      return {
+        x,
+        y,
+        record,
+      };
+    });
+
+    const points = coordinates.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+    const xAxisTitle = 'Отношение абсолютных давлений p2abs / p1abs';
+    const yAxisTitle = 'Скорость истечения w, м/с';
+    const xTickMarks = Array.from({ length: xTicks }, (_, index) => {
+      const ratio = xTicks === 1 ? 0 : index / (xTicks - 1);
+      const value = minX + (maxX - minX) * ratio;
+      const x = axisX + plotWidth * ratio;
+
+      return `
+        <g>
+          <line x1="${x.toFixed(1)}" y1="${axisY}" x2="${x.toFixed(1)}" y2="${(axisY + 6).toFixed(1)}" stroke="rgba(102,123,134,0.45)" stroke-width="1" />
+          <text x="${x.toFixed(1)}" y="${(axisY + 18).toFixed(1)}" text-anchor="middle" font-size="${tickFontSize}" fill="#667b86">${value.toFixed(2)}</text>
+        </g>
+      `;
+    }).join('');
+    const yTickMarks = Array.from({ length: yTicks }, (_, index) => {
+      const ratio = yTicks === 1 ? 0 : index / (yTicks - 1);
+      const value = maxY - (maxY - minY) * ratio;
+      const y = paddingTop + plotHeight * ratio;
+
+      return `
+        <g>
+          <line x1="${(axisX - 6).toFixed(1)}" y1="${y.toFixed(1)}" x2="${axisX}" y2="${y.toFixed(1)}" stroke="rgba(102,123,134,0.45)" stroke-width="1" />
+          <text x="${(axisX - 10).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="${tickFontSize}" fill="#667b86">${value.toFixed(1)}</text>
+        </g>
+      `;
+    }).join('');
+
+    return `
+      <svg viewBox="0 0 ${width} ${height}" class="${APPLICATION_CLASS_NAMES.chart}" aria-label="${APPLICATION_LABELS.velocityChart}">
+        <line x1="${axisX}" y1="${axisY}" x2="${width - paddingRight}" y2="${axisY}" stroke="rgba(102,123,134,0.45)" stroke-width="1.5" />
+        <line x1="${axisX}" y1="${paddingTop}" x2="${axisX}" y2="${axisY}" stroke="rgba(102,123,134,0.45)" stroke-width="1.5" />
+        ${xTickMarks}
+        ${yTickMarks}
+        <polyline fill="none" stroke="#1f7a6a" stroke-width="${strokeWidth}" points="${points}" />
+        ${coordinates
+          .map(
+            ({ x, y, record }: { x: number; y: number; record: (typeof sorted)[number] }) => `
+              <g>
+                <title>Скорость: ${record.velocity.toFixed(2)} м/с; Отношение: ${record.pressureRatio.toFixed(3)}</title>
+                <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${pointRadius}" fill="#15594d" />
+              </g>
+            `,
+          )
+          .join('')}
+        <text x="${(paddingLeft + plotWidth / 2).toFixed(1)}" y="${(height - 10).toFixed(1)}" text-anchor="middle" font-size="${labelFontSize}" fill="#667b86">${xAxisTitle}</text>
+        <text x="${compact ? 12 : 18}" y="${compact ? 18 : 20}" text-anchor="start" font-size="${labelFontSize}" fill="#667b86">${yAxisTitle}</text>
+      </svg>
+    `;
+  }
+
   private sidebarTitle(stage: ReturnType<Lab6Laboratory['stageValue']>): string {
     if (stage === 'assembly') {
       return APPLICATION_LABELS.equipmentPanel;
@@ -813,27 +1020,6 @@ export class Application {
     return this.laboratory.getGrid().snap(point);
   }
 
-  private updateValveFromPointer(item: EquipmentPlacement, event: PointerEvent): void {
-    const position = this.valvePositionFromPointer(item, this.relative(event));
-
-    this.laboratory.setValvePosition(position);
-  }
-
-  private valvePositionFromPointer(item: EquipmentPlacement, point: PixelPoint): number {
-    const tileSize = this.laboratory.getGrid().getTileSize();
-    const origin = this.laboratory.getGrid().point({ tileX: item.tileX, tileY: item.tileY });
-    const width = item.tileWidth * tileSize;
-    const height = item.tileHeight * tileSize;
-    const centerX = origin.x + width * 0.5;
-    const centerY = origin.y + height * 0.18;
-    const angle = Math.atan2(point.y - centerY, point.x - centerX);
-    const minAngle = -Math.PI * 0.75;
-    const maxAngle = Math.PI * 0.75;
-    const clampedAngle = Math.min(Math.max(angle, minAngle), maxAngle);
-    const ratio = (clampedAngle - minAngle) / (maxAngle - minAngle);
-
-    return Math.round(ratio * 10);
-  }
 
   private canvasPoint(event: PointerEvent): GridPoint | null {
     const point = this.relative(event);

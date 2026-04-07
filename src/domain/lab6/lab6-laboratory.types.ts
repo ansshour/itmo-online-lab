@@ -47,6 +47,7 @@ export type LaboratorySnapshot = {
   items: EquipmentPlacement[];
   connections: ConnectionPlacement[];
   measurements: Lab6Measurements | null;
+  measurementRecords: import('./lab6-measurements.types').Lab6MeasurementRecord[];
   selectedGasId: string;
   gasOptions: GasOption[];
   status: string;

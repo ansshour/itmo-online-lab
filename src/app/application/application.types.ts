@@ -31,6 +31,15 @@ export type ApplicationElements = {
   gasSelect: HTMLSelectElement;
   gasHint: HTMLParagraphElement;
   runtimePanel: HTMLDivElement;
+  captureButton: HTMLButtonElement;
+  resultsPreview: HTMLDivElement;
+  resultsPreviewButton: HTMLButtonElement;
+  resultsPanel: HTMLDivElement;
+  resultsModal: HTMLDivElement;
+  resultsModalBackdrop: HTMLDivElement;
+  resultsModalClose: HTMLButtonElement;
+  modalResultsTable: HTMLDivElement;
+  modalResultsChart: HTMLDivElement;
   primaryButton: HTMLButtonElement;
   barometerValue: HTMLDivElement;
   stopwatchValue: HTMLDivElement;

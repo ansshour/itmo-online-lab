@@ -4,6 +4,10 @@ export type Lab6Measurements = {
   pressureLow: number;
   pressureHighDisplay: number;
   pressureLowDisplay: number;
+  pressureHighAbsolute: number;
+  pressureLowAbsolute: number;
+  pressureRatio: number;
+  velocity: number;
   volume: number;
   gasId: string;
   gasLabel: string;
@@ -11,4 +15,13 @@ export type Lab6Measurements = {
   valvePosition: number;
   stopwatchSeconds: number;
   updatedAtSeconds: number;
+};
+
+export type Lab6MeasurementRecord = {
+  index: number;
+  pressureHighBar: number;
+  pressureLowBar: number;
+  flowLitersPerMinute: number;
+  pressureRatio: number;
+  velocity: number;
 };
