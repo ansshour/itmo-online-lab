@@ -151,7 +151,7 @@ export class Application {
 
   private bindCanvas(): void {
     this.elements.canvas.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0) {
+      if (event.pointerType === 'mouse' && event.button !== 0) {
         return;
       }
 
@@ -277,7 +277,7 @@ export class Application {
     });
 
     this.elements.canvas.addEventListener('pointerup', (event) => {
-      if (event.button !== 0) {
+      if (event.pointerType === 'mouse' && event.button !== 0) {
         return;
       }
 
@@ -389,6 +389,10 @@ export class Application {
     });
 
     window.addEventListener('pointerup', (event) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) {
+        return;
+      }
+
       if (this.paletteDrag?.category === 'equipment') {
         this.dropEquipment(event);
       }
