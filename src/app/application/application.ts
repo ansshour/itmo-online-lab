@@ -9,6 +9,7 @@ import type {
 import { LAB6_CONFIG } from '../../config/lab6/lab6.config';
 import type { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
 import type { GridPoint, PixelPoint } from '../../domain/grid/grid.types';
+import { LAB6_GASES } from '../../domain/lab6/lab6-gases';
 import { Lab6Laboratory } from '../../domain/lab6/lab6-laboratory';
 import type { ConnectionFailureReason, EquipmentPlacement, SensorInstallFailureReason } from '../../domain/lab6/lab6-laboratory.types';
 import { CanvasRenderer } from '../../rendering/canvas/canvas-renderer';
@@ -94,6 +95,7 @@ export class Application {
 
   private bind(): void {
     this.bindPrimary();
+    this.bindGasSelection();
     this.bindCanvas();
     this.bindWindow();
   }
@@ -107,6 +109,13 @@ export class Application {
         this.notify(this.successToast(stage), 'success');
       }
 
+      this.refresh();
+    });
+  }
+
+  private bindGasSelection(): void {
+    this.elements.gasSelect.addEventListener('change', () => {
+      this.laboratory.setGas(this.elements.gasSelect.value);
       this.refresh();
     });
   }
@@ -411,6 +420,8 @@ export class Application {
 
     this.elements.sidebarHeader.textContent = this.sidebarTitle(snapshot.stage);
     this.elements.sidebarCaption.textContent = this.sidebarHelper(snapshot.stage);
+    this.elements.gasSelect.value = snapshot.selectedGasId;
+    this.elements.gasHint.textContent = this.gasHint(snapshot);
     this.elements.primaryButton.textContent = snapshot.primaryLabel;
     this.elements.primaryButton.disabled = !running && !canAdvance.valid;
     this.elements.primaryButton.classList.toggle(APPLICATION_CLASS_NAMES.primaryButtonSecondary, running);
@@ -558,6 +569,8 @@ export class Application {
     const sidebarHeader = this.rootElement.querySelector<HTMLHeadingElement>('[data-element="sidebar-header"]');
     const sidebarCaption = this.rootElement.querySelector<HTMLParagraphElement>('[data-element="sidebar-caption"]');
     const sidebarList = this.rootElement.querySelector<HTMLDivElement>('[data-element="sidebar-list"]');
+    const gasSelect = this.rootElement.querySelector<HTMLSelectElement>('[data-element="gas-select"]');
+    const gasHint = this.rootElement.querySelector<HTMLParagraphElement>('[data-element="gas-hint"]');
     const runtimePanel = this.rootElement.querySelector<HTMLDivElement>('[data-element="runtime-panel"]');
     const primaryButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="primary-button"]');
     const barometerValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="barometer-value"]');
@@ -570,6 +583,8 @@ export class Application {
       !sidebarHeader ||
       !sidebarCaption ||
       !sidebarList ||
+      !gasSelect ||
+      !gasHint ||
       !runtimePanel ||
       !primaryButton ||
       !barometerValue ||
@@ -585,6 +600,8 @@ export class Application {
       sidebarHeader,
       sidebarCaption,
       sidebarList,
+      gasSelect,
+      gasHint,
       runtimePanel,
       primaryButton,
       barometerValue,
@@ -608,6 +625,13 @@ export class Application {
           <section>
             <h2 class="${APPLICATION_CLASS_NAMES.panelTitle}" data-element="sidebar-header"></h2>
             <p class="${APPLICATION_CLASS_NAMES.panelCaption}" data-element="sidebar-caption"></p>
+            <label class="${APPLICATION_CLASS_NAMES.gasControl}">
+              <span class="${APPLICATION_CLASS_NAMES.gasControlLabel}">${APPLICATION_LABELS.gasLabel}</span>
+              <select class="${APPLICATION_CLASS_NAMES.gasSelect}" data-element="gas-select">
+                ${this.gasSelectOptions()}
+              </select>
+            </label>
+            <p class="${APPLICATION_CLASS_NAMES.gasHint}" data-element="gas-hint"></p>
             <div class="${APPLICATION_CLASS_NAMES.sidebarList}" data-element="sidebar-list"></div>
           </section>
           <div class="${APPLICATION_CLASS_NAMES.runtimePanel}" data-element="runtime-panel" hidden>
@@ -752,6 +776,26 @@ export class Application {
     }
 
     return APPLICATION_LABELS.runtimePanel;
+  }
+
+  private gasSelectOptions(): string {
+    return LAB6_GASES
+      .map((gas) => `<option value="${gas.id}">${gas.label}</option>`)
+      .join('');
+  }
+
+  private gasHint(snapshot: ReturnType<Lab6Laboratory['snapshot']>): string {
+    const gas = snapshot.gasOptions.find((entry) => entry.id === snapshot.selectedGasId);
+
+    if (!gas) {
+      return '';
+    }
+
+    if (gas.model === 'ideal') {
+      return 'Расчёт без поправки на сжимаемость: Z = 1.';
+    }
+
+    return 'Для реального газа учитывается сжимаемость по уравнению Пенга–Робинсона.';
   }
 
   private label(kind: EquipmentKind | SensorKind): string {

@@ -28,6 +28,8 @@ export type ApplicationElements = {
   sidebarHeader: HTMLHeadingElement;
   sidebarCaption: HTMLParagraphElement;
   sidebarList: HTMLDivElement;
+  gasSelect: HTMLSelectElement;
+  gasHint: HTMLParagraphElement;
   runtimePanel: HTMLDivElement;
   primaryButton: HTMLButtonElement;
   barometerValue: HTMLDivElement;

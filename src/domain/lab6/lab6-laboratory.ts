@@ -3,6 +3,7 @@ import type { EquipmentDefinition, EquipmentKind, SensorKind } from '../../confi
 import { Grid } from '../grid/grid';
 import type { GridPoint } from '../grid/grid.types';
 import { LAB6_NUMBERS, LAB6_STAGE_LABELS, LAB6_STATUS_LABELS } from './lab6-laboratory.consts';
+import { LAB6_DEFAULT_GAS_ID, LAB6_GASES, getLab6Gas } from './lab6-gases';
 import { Lab6Physics } from './lab6-physics';
 import { Lab6Validator } from './lab6-validator';
 import type {
@@ -47,6 +48,8 @@ export class Lab6Laboratory {
 
   private startedAt: number;
 
+  private selectedGasId: string;
+
   public constructor() {
     this.grid = new Grid(
       this.config.gridTileSize,
@@ -67,6 +70,7 @@ export class Lab6Laboratory {
     this.variantIndex = 0;
     this.valvePosition = LAB6_NUMBERS.closedValvePosition;
     this.startedAt = 0;
+    this.selectedGasId = LAB6_DEFAULT_GAS_ID;
   }
 
   public snapshot(): LaboratorySnapshot {
@@ -75,6 +79,8 @@ export class Lab6Laboratory {
       items: [...this.items],
       connections: [...this.connections],
       measurements: this.measurements,
+      selectedGasId: this.selectedGasId,
+      gasOptions: LAB6_GASES.map((gas) => ({ id: gas.id, label: gas.label, model: gas.model })),
       status: this.status,
       primaryLabel: LAB6_STAGE_LABELS[this.stage],
       palette: this.palette(),
@@ -87,6 +93,25 @@ export class Lab6Laboratory {
 
   public stageValue(): LaboratoryStage {
     return this.stage;
+  }
+
+  public setGas(gasId: string): void {
+    const nextGas = getLab6Gas(gasId);
+
+    if (nextGas.id === this.selectedGasId) {
+      return;
+    }
+
+    this.selectedGasId = nextGas.id;
+
+    if (this.measurements) {
+      this.measurements = this.physics.calculate(
+        this.variantIndex,
+        this.valvePosition,
+        this.measurements.stopwatchSeconds,
+        this.selectedGasId,
+      );
+    }
   }
 
   public canAdvance(): ValidationResult {
@@ -317,7 +342,7 @@ export class Lab6Laboratory {
       this.variantIndex = this.physics.choose();
       this.valvePosition = LAB6_NUMBERS.closedValvePosition;
       this.startedAt = now;
-      this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, 0);
+      this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, 0, this.selectedGasId);
       this.status = validation.message;
 
       return validation;
@@ -342,7 +367,7 @@ export class Lab6Laboratory {
       return;
     }
 
-    this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, seconds);
+    this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, seconds, this.selectedGasId);
   }
 
   public valve(step: number): void {
@@ -358,7 +383,12 @@ export class Lab6Laboratory {
     this.valvePosition = next;
 
     if (this.measurements) {
-      this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, this.measurements.stopwatchSeconds);
+      this.measurements = this.physics.calculate(
+        this.variantIndex,
+        this.valvePosition,
+        this.measurements.stopwatchSeconds,
+        this.selectedGasId,
+      );
     }
   }
 
@@ -379,7 +409,12 @@ export class Lab6Laboratory {
     this.valvePosition = next;
 
     if (this.measurements) {
-      this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, this.measurements.stopwatchSeconds);
+      this.measurements = this.physics.calculate(
+        this.variantIndex,
+        this.valvePosition,
+        this.measurements.stopwatchSeconds,
+        this.selectedGasId,
+      );
     }
   }
 

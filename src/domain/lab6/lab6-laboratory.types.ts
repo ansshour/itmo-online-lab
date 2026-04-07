@@ -1,5 +1,6 @@
 import type { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
 import type { GridArea, GridPoint } from '../grid/grid.types';
+import type { GasModelKind } from './lab6-gases';
 import type { Lab6Measurements } from './lab6-measurements.types';
 
 export type LaboratoryStage = 'assembly' | 'instruments' | 'running';
@@ -35,11 +36,19 @@ export type PaletteEntry = {
   category: 'equipment' | 'sensor';
 };
 
+export type GasOption = {
+  id: string;
+  label: string;
+  model: GasModelKind;
+};
+
 export type LaboratorySnapshot = {
   stage: LaboratoryStage;
   items: EquipmentPlacement[];
   connections: ConnectionPlacement[];
   measurements: Lab6Measurements | null;
+  selectedGasId: string;
+  gasOptions: GasOption[];
   status: string;
   primaryLabel: string;
   palette: PaletteEntry[];

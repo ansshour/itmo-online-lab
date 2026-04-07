@@ -5,6 +5,9 @@ export type Lab6Measurements = {
   temperatureHigh: number;
   temperatureLow: number;
   volume: number;
+  gasId: string;
+  gasLabel: string;
+  gasModel: 'ideal' | 'real';
   valvePosition: number;
   stopwatchSeconds: number;
   updatedAtSeconds: number;

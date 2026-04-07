@@ -188,6 +188,47 @@ body {
   line-height: 1.45;
 }
 
+.application__gas-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.application__gas-control-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.application__gas-select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(124, 148, 160, 0.32);
+  border-radius: var(--radius-md);
+  background: rgba(248, 251, 252, 0.96);
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.application__gas-select:focus {
+  border-color: rgba(31, 122, 106, 0.48);
+  box-shadow: 0 0 0 4px rgba(31, 122, 106, 0.12);
+}
+
+.application__gas-hint {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .application__sidebar-list,
 .application__runtime-panel {
   margin-top: 6px;

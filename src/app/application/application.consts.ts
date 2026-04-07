@@ -10,6 +10,10 @@ export const APPLICATION_CLASS_NAMES = {
   primaryButtonSecondary: 'application__primary-button--secondary',
   panelTitle: 'application__panel-title',
   panelCaption: 'application__panel-caption',
+  gasControl: 'application__gas-control',
+  gasControlLabel: 'application__gas-control-label',
+  gasSelect: 'application__gas-select',
+  gasHint: 'application__gas-hint',
   workspaceTitle: 'application__workspace-title',
   paletteItem: 'application__palette-item',
   paletteItemDisabled: 'application__palette-item--disabled',
@@ -25,10 +29,11 @@ export const APPLICATION_CLASS_NAMES = {
 } as const;
 
 export const APPLICATION_LABELS = {
-  title: 'Лабораторная работа №6',
+  title: 'Определение параметров истечения идеального и реальных газов при дросселировании',
   equipmentPanel: 'Оборудование',
   sensorsPanel: 'Датчики',
   runtimePanel: 'Параметры',
+  gasLabel: 'Рабочий газ',
   barometer: 'Барометр',
   stopwatch: 'Секундомер',
   initialStatus: 'Соберите схему Lab6 и подтвердите переход к датчикам.',
