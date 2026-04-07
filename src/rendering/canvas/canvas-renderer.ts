@@ -106,11 +106,14 @@ export class CanvasRenderer {
       const hovered = state.hoveredItem?.id === item.id;
 
       this.shape(item, selected, hovered, state);
-      this.sensors(item, state, false);
     }
 
     for (const item of state.snapshot.items) {
       this.label(item);
+    }
+
+    for (const item of state.snapshot.items) {
+      this.sensors(item, state, false);
     }
 
     if (state.snapshot.stage === 'running' && state.snapshot.measurements) {
@@ -641,10 +644,10 @@ export class CanvasRenderer {
     }
 
     if (renderValues && state.snapshot.measurements && item.kind === 'flowmeter') {
-      const point = this.grid.point({ tileX: item.tileX + item.tileWidth + 1, tileY: item.tileY + 1 });
+      const point = this.grid.point({ tileX: item.tileX + Math.floor(item.tileWidth / 2), tileY: item.tileY });
       const value = `${state.snapshot.measurements.volume.toFixed(3)} м³/с`;
 
-      this.measure(point, value);
+      this.measure(point, value, ['top', 'right', 'left', 'bottom']);
     }
   }
 
@@ -658,7 +661,10 @@ export class CanvasRenderer {
     const offsetX = kind === 'manometer' ? 10 : 12;
     const offsetY = kind === 'manometer' ? -6 : 14;
 
-    this.measure({ x: point.x + offsetX, y: point.y + offsetY }, value);
+    const preferredSides: Array<'top' | 'right' | 'bottom' | 'left'> =
+      kind === 'manometer' ? ['right', 'left', 'top', 'bottom'] : ['bottom', 'top', 'right', 'left'];
+
+    this.measure({ x: point.x + offsetX, y: point.y + offsetY }, value, preferredSides);
   }
 
   private sensorValue(
@@ -675,26 +681,49 @@ export class CanvasRenderer {
     return highChamber ? measurements.temperatureHigh : measurements.temperatureLow;
   }
 
-  private measure(point: PixelPoint, value: string): void {
+  private measure(point: PixelPoint, value: string, preferredSides: Array<'top' | 'right' | 'bottom' | 'left'> = ['right', 'left', 'top', 'bottom']): void {
     const paddingX = 8;
     const paddingY = 6;
     const fontSize = 12;
     const height = 24;
+    const gap = 10;
 
     this.context.save();
     this.context.font = `600 ${fontSize}px Georgia, serif`;
     const width = this.context.measureText(value).width + paddingX * 2;
+    const anchorX = point.x;
+    const anchorY = point.y;
+    const candidates = preferredSides.map((side) => {
+      if (side === 'right') {
+        return { side, x: anchorX + gap, y: anchorY - height / 2 };
+      }
+
+      if (side === 'left') {
+        return { side, x: anchorX - width - gap, y: anchorY - height / 2 };
+      }
+
+      if (side === 'top') {
+        return { side, x: anchorX - width / 2, y: anchorY - height - gap };
+      }
+
+      return { side, x: anchorX - width / 2, y: anchorY + gap };
+    });
+    const fitting = candidates.find(({ x, y }) => x >= 8 && y >= 8 && x + width <= this.viewportWidth - 8 && y + height <= this.viewportHeight - 8);
+    const fallback = candidates[0] ?? { side: 'right', x: anchorX + gap, y: anchorY - height / 2 };
+    const placement = fitting ?? fallback;
+    const x = Math.min(Math.max(placement.x, 8), this.viewportWidth - width - 8);
+    const y = Math.min(Math.max(placement.y, 8), this.viewportHeight - height - 8);
     this.context.fillStyle = 'rgba(255, 255, 255, 0.95)';
     this.context.strokeStyle = '#b5bdc2';
     this.context.lineWidth = 1;
     this.context.shadowColor = 'rgba(87, 84, 74, 0.12)';
     this.context.shadowBlur = 10;
-    this.roundedRect(point.x, point.y, width, height, 8);
+    this.roundedRect(x, y, width, height, 8);
     this.context.fill();
     this.context.shadowBlur = 0;
     this.context.stroke();
     this.context.fillStyle = '#394047';
-    this.context.fillText(value, point.x + paddingX, point.y + height - paddingY - 2);
+    this.context.fillText(value, x + paddingX, y + height - paddingY - 2);
     this.context.restore();
   }
 

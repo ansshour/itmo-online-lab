@@ -20,6 +20,7 @@ body {
 }
 
 .application__frame {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 4fr) minmax(240px, 1fr);
   gap: 24px;
@@ -35,12 +36,14 @@ body {
 }
 
 .application__workspace {
+  position: relative;
+  z-index: 1;
   padding: 18px;
 }
 
 .application__workspace canvas {
   width: 100%;
-  max-width: 100%;
+  max-width: none;
   border-radius: 14px;
   border: 1px solid rgba(122, 118, 106, 0.3);
   background: #f8f7f2;
@@ -96,6 +99,8 @@ body {
 }
 
 .application__sidebar {
+  position: relative;
+  z-index: 2;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -168,7 +173,7 @@ body {
   left: 0;
   opacity: 0;
   pointer-events: none;
-  z-index: 30;
+  z-index: 9999;
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid rgba(122, 118, 106, 0.35);
