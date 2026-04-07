@@ -655,10 +655,6 @@ export class CanvasRenderer {
         this.gauge(point, measurementValue, running);
       }
 
-      if (installed.kind === 'temperatureSensor') {
-        this.thermo(point, measurementValue, running);
-      }
-
       if (renderValues && state.snapshot.measurements) {
         this.values(item, slot.kind, point, state.snapshot.measurements);
       }
@@ -666,7 +662,8 @@ export class CanvasRenderer {
 
     if (renderValues && state.snapshot.measurements && item.kind === 'flowmeter') {
       const point = this.grid.point({ tileX: item.tileX + Math.floor(item.tileWidth / 2), tileY: item.tileY });
-      const value = `${state.snapshot.measurements.volume.toFixed(6)} м³/с`;
+      const litersPerMinute = state.snapshot.measurements.volume * 1000 * 60;
+      const value = `${litersPerMinute.toFixed(2)} л/м`;
 
       this.measure(point, value, ['top', 'right', 'left', 'bottom']);
     }
@@ -678,28 +675,23 @@ export class CanvasRenderer {
     }
 
     const reading = this.sensorValue(item, kind, measurements);
-    const value = kind === 'manometer' ? `${reading.toFixed(1)} кПа` : `${reading.toFixed(1)} °C`;
-    const offsetX = kind === 'manometer' ? 10 : 12;
-    const offsetY = kind === 'manometer' ? -6 : 14;
+    const value = `${reading.toFixed(2)} бар`;
+    const offsetX = 10;
+    const offsetY = -6;
 
-    const preferredSides: Array<'top' | 'right' | 'bottom' | 'left'> =
-      kind === 'manometer' ? ['right', 'left', 'top', 'bottom'] : ['bottom', 'top', 'right', 'left'];
+    const preferredSides: Array<'top' | 'right' | 'bottom' | 'left'> = ['right', 'left', 'top', 'bottom'];
 
     this.measure({ x: point.x + offsetX, y: point.y + offsetY }, value, preferredSides);
   }
 
   private sensorValue(
     item: EquipmentPlacement,
-    kind: SensorKind,
+    _kind: SensorKind,
     measurements: NonNullable<RenderState['snapshot']['measurements']>,
   ): number {
     const highChamber = item.ordinal === 1;
 
-    if (kind === 'manometer') {
-      return highChamber ? measurements.pressureHigh : measurements.pressureLow;
-    }
-
-    return highChamber ? measurements.temperatureHigh : measurements.temperatureLow;
+    return highChamber ? measurements.pressureHighDisplay : measurements.pressureLowDisplay;
   }
 
   private measure(point: PixelPoint, value: string, preferredSides: Array<'top' | 'right' | 'bottom' | 'left'> = ['right', 'left', 'top', 'bottom']): void {
@@ -817,32 +809,6 @@ export class CanvasRenderer {
     this.context.restore();
   }
 
-  private thermo(point: PixelPoint, value: number | null, running: boolean): void {
-    const time = this.animationTime();
-    const reading = value ?? 20;
-    const level = this.clamp(this.normalize(reading, 0, 180) + (running ? Math.sin(time / 420 + point.y * 0.03) * 0.03 : 0), 0.12, 0.88);
-    const columnTop = point.y + 4 - level * 7;
-
-    this.context.save();
-    this.context.fillStyle = '#ffffff';
-    this.context.strokeStyle = '#3a4248';
-    this.context.lineWidth = 1.5;
-    this.context.beginPath();
-    this.context.arc(point.x, point.y, 7, 0, Math.PI * 2);
-    this.context.fill();
-    this.context.stroke();
-    this.context.fillStyle = '#e9eef2';
-    this.context.fillRect(point.x - 1.25, point.y - 4.5, 2.5, 6.2);
-    this.context.beginPath();
-    this.context.arc(point.x, point.y + 2.8, 2.2, 0, Math.PI * 2);
-    this.context.fill();
-    this.context.fillStyle = '#b7482f';
-    this.context.fillRect(point.x - 0.85, columnTop, 1.7, point.y + 2.8 - columnTop);
-    this.context.beginPath();
-    this.context.arc(point.x, point.y + 2.8, 1.8, 0, Math.PI * 2);
-    this.context.fill();
-    this.context.restore();
-  }
 
   private pipe(path: GridPoint[], flowing: boolean, flowPath: GridPoint[] = path, selected = false): void {
     if (path.length < 2) {

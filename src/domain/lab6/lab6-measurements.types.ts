@@ -2,8 +2,8 @@ export type Lab6Measurements = {
   barometer: number;
   pressureHigh: number;
   pressureLow: number;
-  temperatureHigh: number;
-  temperatureLow: number;
+  pressureHighDisplay: number;
+  pressureLowDisplay: number;
   volume: number;
   gasId: string;
   gasLabel: string;

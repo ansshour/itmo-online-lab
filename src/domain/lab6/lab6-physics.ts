@@ -1,5 +1,4 @@
 import { LAB6_PARAMETERS, LAB6_SUBVARIANTS_COUNT } from '../../config/lab6/lab6-parameters.config';
-import type { Lab6ParameterRow } from '../../config/lab6/lab6-parameters.types';
 import { getLab6Gas } from './lab6-gases';
 import type { Lab6Measurements } from './lab6-measurements.types';
 
@@ -18,20 +17,21 @@ export class Lab6Physics {
 
     const pressureHighAbsolute = this.absolute(row.p1, row.B);
     const pressureLowAbsolute = pressureHighAbsolute * row.b;
-    const temperatureLow = this.temperature(row, gas.adiabaticIndex);
-    const volume = this.volume(row, gasId);
-    const pressureHigh = this.relative(this.vary(pressureHighAbsolute, 0, 3), row.B);
-    const pressureLow = this.relative(this.vary(pressureLowAbsolute, 3, 0), row.B);
-    const temperatureHigh = row.t1;
-    const temperatureLowVaried = this.vary(temperatureLow, 5, 5);
+    const pressureHighAbsoluteVaried = this.vary(pressureHighAbsolute, 0, 3);
+    const pressureLowAbsoluteVaried = this.vary(pressureLowAbsolute, 3, 0);
+    const volume = this.volume(row.p1, row.b, row.D, gasId);
+    const pressureHigh = this.relative(pressureHighAbsoluteVaried, row.B);
+    const pressureLow = this.relative(pressureLowAbsoluteVaried, row.B);
+    const pressureHighDisplay = pressureHighAbsoluteVaried / 100;
+    const pressureLowDisplay = pressureLowAbsoluteVaried / 100;
     const volumeVaried = this.vary(volume, 3, 3);
 
     return {
       barometer: row.B,
       pressureHigh,
       pressureLow,
-      temperatureHigh,
-      temperatureLow: temperatureLowVaried,
+      pressureHighDisplay,
+      pressureLowDisplay,
       volume: volumeVaried,
       gasId: gas.id,
       gasLabel: gas.label,
@@ -56,44 +56,26 @@ export class Lab6Physics {
     return value * (1 + deviation * 0.01);
   }
 
-  private temperature(row: Lab6ParameterRow, adiabaticIndex: number): number {
-    const numerator = 1 / row.b;
-    const exponent = (1 - adiabaticIndex) / adiabaticIndex;
-    const kelvin = row.t1 + 273.15;
-
-    return Math.pow(numerator, exponent) * kelvin - 273.15;
-  }
-
-  private volume(row: Lab6ParameterRow, gasId: string): number {
+  private volume(pressureHighRelative: number, ratio: number, diameter: number, gasId: string): number {
     const gas = getLab6Gas(gasId);
-    const area = (Math.PI * row.D * row.D) / 4;
-    const pressureHighAbsolute = this.absolute(row.p1, row.B) * 1000;
-    const pressureLowAbsolute = pressureHighAbsolute * row.b;
-    const kelvinHigh = row.t1 + 273.15;
-    const kelvinLow = this.temperature(row, gas.adiabaticIndex) + 273.15;
+    const area = (Math.PI * diameter * diameter) / 4;
+    const referenceTemperature = 293.15;
+    const z = this.compressibility(gasId, this.absolute(pressureHighRelative, 758) * 1000, referenceTemperature);
+    const effectiveGasConstant = gas.specificGasConstant / Math.max(z, this.epsilon);
     const criticalRatio = this.criticalRatio(gas.adiabaticIndex);
-    const zHigh = this.compressibility(gasId, pressureHighAbsolute, kelvinHigh);
-    const zLow = this.compressibility(gasId, pressureLowAbsolute, kelvinLow);
-    const specificGasConstant = gas.specificGasConstant;
-    let massFlow = 0;
 
-    if (row.b > criticalRatio) {
-      const exponentBase = Math.pow(row.b, 2 / gas.adiabaticIndex) - Math.pow(row.b, (gas.adiabaticIndex + 1) / gas.adiabaticIndex);
-      const factor = (2 * gas.adiabaticIndex) / (zHigh * specificGasConstant * kelvinHigh * (gas.adiabaticIndex - 1));
-
-      massFlow = area * pressureHighAbsolute * Math.sqrt(Math.max(factor * exponentBase, 0));
-    } else {
-      const criticalFactor = Math.pow(2 / (gas.adiabaticIndex + 1), (gas.adiabaticIndex + 1) / (gas.adiabaticIndex - 1));
-
-      massFlow =
-        area *
-        pressureHighAbsolute *
-        Math.sqrt((gas.adiabaticIndex / (zHigh * specificGasConstant * kelvinHigh)) * criticalFactor);
+    if (ratio > criticalRatio) {
+      return (
+        Math.sqrt(
+          ((2 * gas.adiabaticIndex) / (gas.adiabaticIndex - 1)) *
+            effectiveGasConstant *
+            referenceTemperature *
+            (1 - Math.pow(ratio, (gas.adiabaticIndex - 1) / gas.adiabaticIndex)),
+        ) * area
+      );
     }
 
-    const outletDensity = pressureLowAbsolute / (Math.max(zLow, 1e-6) * specificGasConstant * kelvinLow);
-
-    return massFlow / Math.max(outletDensity, 1e-6);
+    return Math.sqrt(((2 * gas.adiabaticIndex) / (gas.adiabaticIndex - 1)) * effectiveGasConstant * referenceTemperature) * area;
   }
 
   private criticalRatio(adiabaticIndex: number): number {

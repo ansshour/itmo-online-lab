@@ -56,7 +56,6 @@ export const APPLICATION_TEXTS = {
   sensorCount: 'шт.',
   barometerUnit: 'мм рт. ст.',
   pressureUnit: 'кПа',
-  temperatureUnit: '°C',
   volumeUnit: 'м³/с',
 } as const;
 

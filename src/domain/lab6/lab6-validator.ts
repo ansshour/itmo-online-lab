@@ -32,12 +32,7 @@ export class Lab6Validator {
       return { valid: false, message: LAB6_STATUS_LABELS.sensorError };
     }
 
-    const sensorsValid = chambers.every((item) => {
-      const hasManometer = item.sensors.some((sensor) => sensor.kind === 'manometer');
-      const hasTemperature = item.sensors.some((sensor) => sensor.kind === 'temperatureSensor');
-
-      return hasManometer && hasTemperature;
-    });
+    const sensorsValid = chambers.every((item) => item.sensors.some((sensor) => sensor.kind === 'manometer'));
 
     if (!sensorsValid) {
       return { valid: false, message: LAB6_STATUS_LABELS.sensorError };

@@ -39,10 +39,7 @@ export const LAB6_CONFIG: Lab6Config = {
         { id: 'in', tileX: 0, tileY: 3 },
         { id: 'out', tileX: 4, tileY: 3 },
       ],
-      sensorSlots: [
-        { id: 'manometer', kind: 'manometer', tileX: 4, tileY: 1 },
-        { id: 'temperature', kind: 'temperatureSensor', tileX: 4, tileY: 4 },
-      ],
+      sensorSlots: [{ id: 'manometer', kind: 'manometer', tileX: 4, tileY: 1 }],
     },
     nozzle: {
       kind: 'nozzle',
@@ -87,7 +84,7 @@ export const LAB6_CONFIG: Lab6Config = {
     temperatureSensor: {
       kind: 'temperatureSensor',
       label: 'Термодатчик',
-      maxCount: 2,
+      maxCount: 0,
     },
   },
 };
