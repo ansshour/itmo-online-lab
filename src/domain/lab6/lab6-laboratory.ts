@@ -6,11 +6,14 @@ import { LAB6_NUMBERS, LAB6_STAGE_LABELS, LAB6_STATUS_LABELS } from './lab6-labo
 import { Lab6Physics } from './lab6-physics';
 import { Lab6Validator } from './lab6-validator';
 import type {
+  ConnectionFailureReason,
   ConnectionPlacement,
   EquipmentPlacement,
+  InteractionResult,
   LaboratorySnapshot,
   LaboratoryStage,
   PaletteEntry,
+  SensorInstallFailureReason,
   ValidationResult,
 } from './lab6-laboratory.types';
 import type { Lab6Measurements } from './lab6-measurements.types';
@@ -86,6 +89,18 @@ export class Lab6Laboratory {
     return this.stage;
   }
 
+  public canAdvance(): ValidationResult {
+    if (this.stage === 'assembly') {
+      return this.validator.assembly(this.items, this.connections);
+    }
+
+    if (this.stage === 'instruments') {
+      return this.validator.sensors(this.items);
+    }
+
+    return { valid: true, message: LAB6_STATUS_LABELS.runningStopped };
+  }
+
   public create(kind: EquipmentKind, point: GridPoint): boolean {
     if (this.stage !== 'assembly') {
       return false;
@@ -150,13 +165,22 @@ export class Lab6Laboratory {
     this.status = LAB6_STATUS_LABELS.assembly;
   }
 
-  public connect(fromEquipmentId: string, fromPortId: string, toEquipmentId: string, toPortId: string): boolean {
+  public connect(
+    fromEquipmentId: string,
+    fromPortId: string,
+    toEquipmentId: string,
+    toPortId: string,
+  ): InteractionResult<ConnectionFailureReason> {
     if (this.stage !== 'assembly') {
-      return false;
+      return { ok: false, reason: 'stage' };
     }
 
     if (fromEquipmentId === toEquipmentId) {
-      return false;
+      return { ok: false, reason: 'self' };
+    }
+
+    if (!this.connectionAllowed(fromEquipmentId, fromPortId, toEquipmentId, toPortId)) {
+      return { ok: false, reason: 'invalidTarget' };
     }
 
     const sameConnection = this.connections.some((connection) => {
@@ -174,25 +198,34 @@ export class Lab6Laboratory {
       return direct || reverse;
     });
 
-    if (sameConnection || this.portBusy(fromEquipmentId, fromPortId) || this.portBusy(toEquipmentId, toPortId)) {
-      return false;
+    if (sameConnection) {
+      return { ok: false, reason: 'duplicate' };
+    }
+
+    if (this.portBusy(fromEquipmentId, fromPortId) || this.portBusy(toEquipmentId, toPortId)) {
+      return { ok: false, reason: 'portBusy' };
     }
 
     const connection: ConnectionPlacement = {
       id: `connection-${this.connectionIdentifier}`,
-      from: { equipmentId: fromEquipmentId, portId: fromPortId },
-      to: { equipmentId: toEquipmentId, portId: toPortId },
-      path: this.routePointsBetweenPorts(fromEquipmentId, fromPortId, toEquipmentId, toPortId),
+      from: this.connectionOrientation(fromEquipmentId, fromPortId, toEquipmentId, toPortId).from,
+      to: this.connectionOrientation(fromEquipmentId, fromPortId, toEquipmentId, toPortId).to,
+      path: this.routePointsBetweenPorts(
+        this.connectionOrientation(fromEquipmentId, fromPortId, toEquipmentId, toPortId).from.equipmentId,
+        this.connectionOrientation(fromEquipmentId, fromPortId, toEquipmentId, toPortId).from.portId,
+        this.connectionOrientation(fromEquipmentId, fromPortId, toEquipmentId, toPortId).to.equipmentId,
+        this.connectionOrientation(fromEquipmentId, fromPortId, toEquipmentId, toPortId).to.portId,
+      ),
     };
 
     if (connection.path.length < 2) {
-      return false;
+      return { ok: false, reason: 'invalidRoute' };
     }
 
     this.connectionIdentifier += 1;
     this.connections = [...this.connections, connection];
 
-    return true;
+    return { ok: true };
   }
 
   public disconnect(identifier: string): void {
@@ -212,27 +245,31 @@ export class Lab6Laboratory {
     return this.routePointsBetweenPorts(fromEquipmentId, fromPortId, toEquipmentId, toPortId);
   }
 
-  public install(kind: SensorKind, equipmentId: string, slotId: string): boolean {
+  public install(kind: SensorKind, equipmentId: string, slotId: string): InteractionResult<SensorInstallFailureReason> {
     if (this.stage !== 'instruments') {
-      return false;
+      return { ok: false, reason: 'stage' };
     }
 
     if (this.remainingSensor(kind) <= 0) {
-      return false;
+      return { ok: false, reason: 'limit' };
     }
 
     const equipment = this.items.find((item) => item.id === equipmentId);
     const definition = equipment ? this.config.equipment[equipment.kind] : null;
     const slot = definition?.sensorSlots.find((entry) => entry.id === slotId);
 
-    if (!equipment || !slot || slot.kind !== kind) {
-      return false;
+    if (!equipment || !slot) {
+      return { ok: false, reason: 'wrongPoint' };
+    }
+
+    if (slot.kind !== kind) {
+      return { ok: false, reason: 'wrongSensorType' };
     }
 
     const occupied = equipment.sensors.some((sensor) => sensor.slotId === slotId);
 
     if (occupied) {
-      return false;
+      return { ok: false, reason: 'occupied' };
     }
 
     this.items = this.items.map((item) => {
@@ -248,7 +285,7 @@ export class Lab6Laboratory {
 
     this.status = LAB6_STATUS_LABELS.instruments;
 
-    return true;
+    return { ok: true };
   }
 
   public advance(now: number): ValidationResult {
@@ -599,6 +636,46 @@ export class Lab6Laboratory {
       middle,
       [toLead, to],
     ]));
+  }
+
+  private connectionAllowed(fromEquipmentId: string, fromPortId: string, toEquipmentId: string, toPortId: string): boolean {
+    const fromItem = this.items.find((item) => item.id === fromEquipmentId);
+    const toItem = this.items.find((item) => item.id === toEquipmentId);
+
+    if (!fromItem || !toItem) {
+      return false;
+    }
+
+    if (!this.portDirectionsCompatible(fromPortId, toPortId)) {
+      return false;
+    }
+
+    const fromKind = fromItem.kind;
+    const toKind = toItem.kind;
+    const pair = `${fromKind}:${toKind}`;
+    const reversePair = `${toKind}:${fromKind}`;
+    const allowedPairs = new Set(
+      this.config.chain.slice(0, -1).map((kind, index) => `${kind}:${this.config.chain[index + 1]}`),
+    );
+
+    return allowedPairs.has(pair) || allowedPairs.has(reversePair);
+  }
+
+  private connectionOrientation(fromEquipmentId: string, fromPortId: string, toEquipmentId: string, toPortId: string): {
+    from: { equipmentId: string; portId: string };
+    to: { equipmentId: string; portId: string };
+  } {
+    if (this.portDirection(fromPortId) === 'out') {
+      return {
+        from: { equipmentId: fromEquipmentId, portId: fromPortId },
+        to: { equipmentId: toEquipmentId, portId: toPortId },
+      };
+    }
+
+    return {
+      from: { equipmentId: toEquipmentId, portId: toPortId },
+      to: { equipmentId: fromEquipmentId, portId: fromPortId },
+    };
   }
 
   private routePoints(from: GridPoint, to: GridPoint): GridPoint[] {

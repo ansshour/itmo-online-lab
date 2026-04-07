@@ -9,8 +9,18 @@ import { LAB6_CONFIG } from '../../config/lab6/lab6.config';
 import type { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
 import type { GridPoint, PixelPoint } from '../../domain/grid/grid.types';
 import { Lab6Laboratory } from '../../domain/lab6/lab6-laboratory';
+import type { ConnectionFailureReason, SensorInstallFailureReason } from '../../domain/lab6/lab6-laboratory.types';
 import { CanvasRenderer } from '../../rendering/canvas/canvas-renderer';
 import type { ConnectionPreview, PlacementPreview, SensorPreview } from '../../rendering/canvas/canvas-renderer.types';
+
+type ToastKind = 'success' | 'error';
+
+type ToastMessage = {
+  id: number;
+  kind: ToastKind;
+  message: string;
+  expiresAt: number;
+};
 
 export class Application {
   private readonly rootElement: HTMLDivElement;
@@ -41,6 +51,14 @@ export class Application {
 
   private hoveredPort: ConnectionSession | null;
 
+  private toasts: ToastMessage[];
+
+  private toastIdentifier: number;
+
+  private readonly toastNodes: Map<number, HTMLDivElement>;
+
+  private readonly leavingToastIds: Set<number>;
+
   public constructor(rootElement: HTMLDivElement) {
     this.rootElement = rootElement;
     this.rootElement.innerHTML = this.template();
@@ -58,6 +76,10 @@ export class Application {
     this.selectedConnectionId = '';
     this.hoveredItemId = '';
     this.hoveredPort = null;
+    this.toasts = [];
+    this.toastIdentifier = 1;
+    this.toastNodes = new Map();
+    this.leavingToastIds = new Set();
   }
 
   public start(): void {
@@ -68,13 +90,32 @@ export class Application {
 
   private bind(): void {
     this.bindPrimary();
+    this.bindValve();
     this.bindCanvas();
     this.bindWindow();
   }
 
   private bindPrimary(): void {
     this.elements.primaryButton.addEventListener('click', () => {
-      this.laboratory.advance(performance.now());
+      const stage = this.laboratory.stageValue();
+      const validation = this.laboratory.advance(performance.now());
+
+      if (validation.valid) {
+        this.notify(this.successToast(stage), 'success');
+      }
+
+      this.refresh();
+    });
+  }
+
+  private bindValve(): void {
+    this.elements.valveOpenButton.addEventListener('click', () => {
+      this.laboratory.valve(APPLICATION_NUMBERS.valveStep);
+      this.refresh();
+    });
+
+    this.elements.valveCloseButton.addEventListener('click', () => {
+      this.laboratory.valve(-APPLICATION_NUMBERS.valveStep);
       this.refresh();
     });
   }
@@ -222,16 +263,19 @@ export class Application {
       if (stage === 'assembly' && this.connection) {
         const targetPort = this.portAtEvent(event);
 
-        if (targetPort && !this.samePort(this.connection, targetPort)) {
-          this.laboratory.connect(this.connection.equipmentId, this.connection.portId, targetPort.equipmentId, targetPort.portId);
-        }
-      }
+        if (!targetPort) {
+          this.notify(APPLICATION_LABELS.connectionInvalidError, 'error');
+        } else {
+          const result = this.laboratory.connect(
+            this.connection.equipmentId,
+            this.connection.portId,
+            targetPort.equipmentId,
+            targetPort.portId,
+          );
 
-      if (stage === 'instruments' && this.paletteDrag?.category === 'sensor') {
-        const slot = this.laboratory.sensor(point);
-
-        if (slot && slot.kind === this.paletteDrag.kind) {
-          this.laboratory.install(this.paletteDrag.kind as SensorKind, slot.equipmentId, slot.slotId);
+          if (!result.ok) {
+            this.notify(this.connectionToast(result.reason), 'error');
+          }
         }
       }
 
@@ -323,25 +367,35 @@ export class Application {
   }
 
   private loop(): void {
-    this.laboratory.tick(performance.now());
+    const now = performance.now();
+
+    this.laboratory.tick(now);
+    this.pruneToasts(now);
     this.refresh();
     window.requestAnimationFrame(() => this.loop());
   }
 
   private refresh(): void {
     const snapshot = this.laboratory.snapshot();
+    const running = snapshot.stage === 'running';
+    const canAdvance = this.laboratory.canAdvance();
 
     this.elements.sidebarHeader.textContent = this.sidebarTitle(snapshot.stage);
-    this.elements.sidebarCaption.textContent = this.sidebarCaption(snapshot.stage);
-    this.elements.status.textContent = snapshot.status;
+    this.elements.sidebarCaption.textContent = this.sidebarHelper(snapshot.stage);
     this.elements.primaryButton.textContent = snapshot.primaryLabel;
+    this.elements.primaryButton.disabled = !running && !canAdvance.valid;
+    this.elements.primaryButton.classList.toggle(APPLICATION_CLASS_NAMES.primaryButtonSecondary, running);
     this.elements.barometerValue.textContent = snapshot.measurements
       ? `${snapshot.measurements.barometer.toFixed(0)} ${APPLICATION_TEXTS.barometerUnit}`
       : `0 ${APPLICATION_TEXTS.barometerUnit}`;
     this.elements.stopwatchValue.textContent = snapshot.measurements
       ? snapshot.measurements.stopwatchSeconds.toString().padStart(2, '0')
       : '00';
+    this.elements.runtimePanel.hidden = !running;
+    this.elements.sidebarList.hidden = running;
+    this.elements.valveControls.hidden = !running;
     this.palette(snapshot);
+    this.renderToasts();
     this.renderer.render({
       snapshot,
       placementPreview: this.placementPreview,
@@ -357,6 +411,12 @@ export class Application {
   }
 
   private palette(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
+    if (snapshot.stage === 'running') {
+      this.elements.sidebarList.innerHTML = '';
+
+      return;
+    }
+
     this.elements.sidebarList.innerHTML = '';
 
     for (const entry of snapshot.palette) {
@@ -436,11 +496,17 @@ export class Application {
 
     const slot = this.laboratory.sensor(point);
 
-    if (!slot || slot.kind !== this.paletteDrag.kind) {
+    if (!slot) {
+      this.notify(APPLICATION_LABELS.sensorWrongPointError, 'error');
+
       return;
     }
 
-    this.laboratory.install(this.paletteDrag.kind as SensorKind, slot.equipmentId, slot.slotId);
+    const result = this.laboratory.install(this.paletteDrag.kind as SensorKind, slot.equipmentId, slot.slotId);
+
+    if (!result.ok) {
+      this.notify(this.sensorToast(result.reason), 'error');
+    }
   }
 
   private dragGhost(): void {
@@ -458,10 +524,14 @@ export class Application {
     const sidebarHeader = this.rootElement.querySelector<HTMLHeadingElement>('[data-element="sidebar-header"]');
     const sidebarCaption = this.rootElement.querySelector<HTMLParagraphElement>('[data-element="sidebar-caption"]');
     const sidebarList = this.rootElement.querySelector<HTMLDivElement>('[data-element="sidebar-list"]');
-    const status = this.rootElement.querySelector<HTMLParagraphElement>('[data-element="status"]');
+    const runtimePanel = this.rootElement.querySelector<HTMLDivElement>('[data-element="runtime-panel"]');
     const primaryButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="primary-button"]');
     const barometerValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="barometer-value"]');
     const stopwatchValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="stopwatch-value"]');
+    const valveControls = this.rootElement.querySelector<HTMLDivElement>('[data-element="valve-controls"]');
+    const valveOpenButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="valve-open"]');
+    const valveCloseButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="valve-close"]');
+    const toastStack = this.rootElement.querySelector<HTMLDivElement>('[data-element="toast-stack"]');
     const dragGhost = this.rootElement.querySelector<HTMLDivElement>('[data-element="drag-ghost"]');
 
     if (
@@ -469,10 +539,14 @@ export class Application {
       !sidebarHeader ||
       !sidebarCaption ||
       !sidebarList ||
-      !status ||
+      !runtimePanel ||
       !primaryButton ||
       !barometerValue ||
       !stopwatchValue ||
+      !valveControls ||
+      !valveOpenButton ||
+      !valveCloseButton ||
+      !toastStack ||
       !dragGhost
     ) {
       throw new Error('Application layout is incomplete.');
@@ -483,10 +557,14 @@ export class Application {
       sidebarHeader,
       sidebarCaption,
       sidebarList,
-      status,
+      runtimePanel,
       primaryButton,
       barometerValue,
       stopwatchValue,
+      valveControls,
+      valveOpenButton,
+      valveCloseButton,
+      toastStack,
       dragGhost,
     };
   }
@@ -495,36 +573,152 @@ export class Application {
     return `
       <div class="${APPLICATION_CLASS_NAMES.frame}">
         <section class="${APPLICATION_CLASS_NAMES.workspace}">
-          <canvas data-element="canvas"></canvas>
-          <div class="${APPLICATION_CLASS_NAMES.toolbar}">
-            <button class="${APPLICATION_CLASS_NAMES.primaryButton}" data-element="primary-button" type="button"></button>
+          <div class="${APPLICATION_CLASS_NAMES.workspaceTitle}">${APPLICATION_LABELS.title}</div>
+          <div class="${APPLICATION_CLASS_NAMES.canvasShell}">
+            <canvas data-element="canvas"></canvas>
           </div>
-          <p class="${APPLICATION_CLASS_NAMES.status}" data-element="status">${APPLICATION_LABELS.initialStatus}</p>
+          <button class="${APPLICATION_CLASS_NAMES.primaryButton}" data-element="primary-button" type="button"></button>
         </section>
         <aside class="${APPLICATION_CLASS_NAMES.sidebar}">
-          <header class="${APPLICATION_CLASS_NAMES.sidebarHeader}">
-            <div>
-              <p class="${APPLICATION_CLASS_NAMES.panelCaption}">${APPLICATION_LABELS.subtitle}</p>
-              <h1 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.title}</h1>
-            </div>
-          </header>
           <section>
             <h2 class="${APPLICATION_CLASS_NAMES.panelTitle}" data-element="sidebar-header"></h2>
             <p class="${APPLICATION_CLASS_NAMES.panelCaption}" data-element="sidebar-caption"></p>
             <div class="${APPLICATION_CLASS_NAMES.sidebarList}" data-element="sidebar-list"></div>
           </section>
-          <section class="${APPLICATION_CLASS_NAMES.widget}">
-            <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.barometer}</div>
-            <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="barometer-value"></div>
-          </section>
-          <section class="${APPLICATION_CLASS_NAMES.widget}">
-            <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.stopwatch}</div>
-            <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="stopwatch-value"></div>
-          </section>
+          <div class="${APPLICATION_CLASS_NAMES.runtimePanel}" data-element="runtime-panel" hidden>
+            <section class="${APPLICATION_CLASS_NAMES.widget}">
+              <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.barometer}</div>
+              <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="barometer-value"></div>
+            </section>
+            <section class="${APPLICATION_CLASS_NAMES.widget}">
+              <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.stopwatch}</div>
+              <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="stopwatch-value"></div>
+            </section>
+            <section class="${APPLICATION_CLASS_NAMES.valveControls}" data-element="valve-controls" hidden>
+              <button class="${APPLICATION_CLASS_NAMES.valveButton}" data-element="valve-close" type="button">${APPLICATION_LABELS.valveClose}</button>
+              <button class="${APPLICATION_CLASS_NAMES.valveButton}" data-element="valve-open" type="button">${APPLICATION_LABELS.valveOpen}</button>
+            </section>
+          </div>
         </aside>
+        <div class="${APPLICATION_CLASS_NAMES.toastStack}" data-element="toast-stack"></div>
         <div class="${APPLICATION_CLASS_NAMES.dragGhost}" data-element="drag-ghost"></div>
       </div>
     `;
+  }
+
+  private successToast(stage: ReturnType<Lab6Laboratory['stageValue']>): string {
+    if (stage === 'assembly') {
+      return APPLICATION_LABELS.assemblyConfirmedToast;
+    }
+
+    if (stage === 'instruments') {
+      return APPLICATION_LABELS.runningStartedToast;
+    }
+
+    return APPLICATION_LABELS.runningStoppedToast;
+  }
+
+  private connectionToast(reason: ConnectionFailureReason): string {
+    if (reason === 'self') {
+      return APPLICATION_LABELS.connectionSelfError;
+    }
+
+    if (reason === 'duplicate') {
+      return APPLICATION_LABELS.connectionDuplicateError;
+    }
+
+    if (reason === 'portBusy') {
+      return APPLICATION_LABELS.connectionBusyError;
+    }
+
+    if (reason === 'invalidTarget') {
+      return APPLICATION_LABELS.connectionInvalidError;
+    }
+
+    return APPLICATION_LABELS.connectionInvalidError;
+  }
+
+  private sensorToast(reason: SensorInstallFailureReason): string {
+    if (reason === 'occupied') {
+      return APPLICATION_LABELS.sensorOccupiedError;
+    }
+
+    if (reason === 'wrongSensorType') {
+      return APPLICATION_LABELS.sensorWrongTypeError;
+    }
+
+    return APPLICATION_LABELS.sensorWrongPointError;
+  }
+
+  private sidebarHelper(stage: ReturnType<Lab6Laboratory['stageValue']>): string {
+    if (stage === 'assembly') {
+      return APPLICATION_LABELS.assemblyHelper;
+    }
+
+    if (stage === 'instruments') {
+      return APPLICATION_LABELS.instrumentsHelper;
+    }
+
+    return APPLICATION_LABELS.runningHelper;
+  }
+
+  private notify(message: string, kind: ToastKind): void {
+    this.toasts = [
+      ...this.toasts,
+      {
+        id: this.toastIdentifier,
+        kind,
+        message,
+        expiresAt: performance.now() + 4000,
+      },
+    ];
+    this.toastIdentifier += 1;
+  }
+
+  private pruneToasts(now: number): void {
+    this.toasts = this.toasts.filter((toast) => toast.expiresAt > now);
+  }
+
+  private renderToasts(): void {
+    const activeIds = new Set(this.toasts.map((toast) => toast.id));
+
+    for (const [toastId, node] of this.toastNodes) {
+      if (activeIds.has(toastId) || this.leavingToastIds.has(toastId)) {
+        continue;
+      }
+
+      this.leavingToastIds.add(toastId);
+      node.classList.add('application__toast--leaving');
+      window.setTimeout(() => {
+        node.remove();
+        this.toastNodes.delete(toastId);
+        this.leavingToastIds.delete(toastId);
+      }, 220);
+    }
+
+    for (const toast of this.toasts) {
+      let node = this.toastNodes.get(toast.id);
+
+      if (!node) {
+        node = document.createElement('div');
+        node.className = `${APPLICATION_CLASS_NAMES.toast} application__toast--entering ${toast.kind === 'error' ? APPLICATION_CLASS_NAMES.toastError : APPLICATION_CLASS_NAMES.toastSuccess}`;
+        node.textContent = toast.message;
+        node.dataset.toastId = toast.id.toString();
+        this.toastNodes.set(toast.id, node);
+        this.elements.toastStack.append(node);
+        window.requestAnimationFrame(() => {
+          node?.classList.remove('application__toast--entering');
+        });
+
+        continue;
+      }
+
+      node.textContent = toast.message;
+
+      if (this.elements.toastStack.children[this.toasts.indexOf(toast)] !== node) {
+        this.elements.toastStack.insertBefore(node, this.elements.toastStack.children[this.toasts.indexOf(toast)] ?? null);
+      }
+    }
   }
 
   private sidebarTitle(stage: ReturnType<Lab6Laboratory['stageValue']>): string {
@@ -538,20 +732,8 @@ export class Application {
 
     return APPLICATION_LABELS.runtimePanel;
   }
-
-  private sidebarCaption(stage: ReturnType<Lab6Laboratory['stageValue']>): string {
-    if (stage === 'assembly') {
-      return '';
-    }
-
-    if (stage === 'instruments') {
-      return 'Перенесите датчики на валидные точки камер.';
-    }
-
-    return '';
-  }
-
   private label(kind: EquipmentKind | SensorKind): string {
+
     if (kind in LAB6_CONFIG.equipment) {
       return LAB6_CONFIG.equipment[kind as EquipmentKind].label;
     }
@@ -561,7 +743,7 @@ export class Application {
 
   private gridPoint(event: PointerEvent): GridPoint {
     const point = this.relative(event);
-
+    
     return this.laboratory.getGrid().snap(point);
   }
 
