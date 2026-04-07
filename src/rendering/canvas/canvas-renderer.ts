@@ -18,6 +18,8 @@ export class CanvasRenderer {
 
   private readonly pixelRatio: number;
 
+  private badgeBounds: Array<{ x: number; y: number; width: number; height: number }>;
+
   public constructor(canvas: HTMLCanvasElement, grid: Grid) {
     const context = canvas.getContext('2d');
 
@@ -31,12 +33,14 @@ export class CanvasRenderer {
     this.viewportWidth = this.grid.widthPixels();
     this.viewportHeight = this.grid.heightPixels();
     this.pixelRatio = typeof window === 'undefined' ? 1 : Math.max(window.devicePixelRatio || 1, 1);
+    this.badgeBounds = [];
     this.canvas.width = Math.round(this.viewportWidth * this.pixelRatio);
     this.canvas.height = Math.round(this.viewportHeight * this.pixelRatio);
     this.context.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
   }
 
   public render(state: RenderState): void {
+    this.badgeBounds = [];
     this.clear();
     this.gridDots();
     this.connections(state);
@@ -106,10 +110,6 @@ export class CanvasRenderer {
       const hovered = state.hoveredItem?.id === item.id;
 
       this.shape(item, selected, hovered, state);
-    }
-
-    for (const item of state.snapshot.items) {
-      this.label(item);
     }
 
     for (const item of state.snapshot.items) {
@@ -514,7 +514,9 @@ export class CanvasRenderer {
     this.context.fill();
     this.context.restore();
 
-    this.measure({ x: centerX, y: y - 2 }, `Положение ${valvePosition}/10`, ['top']);
+    if (running) {
+      this.measure({ x: centerX, y: y - 2 }, `Положение ${valvePosition}/10`, ['top', 'left', 'right']);
+    }
   }
 
   private drawFlowmeter(x: number, y: number, width: number, height: number, running: boolean, time: number, volume: number): void {
@@ -566,17 +568,6 @@ export class CanvasRenderer {
     this.roundedRect(x + width * 0.84, pipeCenterY - stubHeight / 2, width * 0.16, stubHeight, 4);
     this.context.fill();
     this.context.stroke();
-  }
-
-  private label(item: EquipmentPlacement): void {
-    const point = this.grid.point({ tileX: item.tileX, tileY: item.tileY });
-    const tileSize = this.grid.getTileSize();
-    const definition = LAB6_CONFIG.equipment[item.kind];
-    const text = item.kind === 'chamber' ? `${definition.label} ${item.ordinal}` : definition.label;
-
-    this.context.fillStyle = '#524d42';
-    this.context.font = '12px Georgia, serif';
-    this.context.fillText(text, point.x, point.y - tileSize * 0.35);
   }
 
   private ports(
@@ -717,32 +708,49 @@ export class CanvasRenderer {
     const fontSize = 12;
     const height = 24;
     const gap = 10;
+    const ringGap = height + 8;
 
     this.context.save();
     this.context.font = `600 ${fontSize}px Georgia, serif`;
     const width = this.context.measureText(value).width + paddingX * 2;
     const anchorX = point.x;
     const anchorY = point.y;
-    const candidates = preferredSides.map((side) => {
-      if (side === 'right') {
-        return { side, x: anchorX + gap, y: anchorY - height / 2 };
-      }
+    const candidates = preferredSides.flatMap((side) =>
+      [gap, gap + ringGap, gap + ringGap * 2].map((distance) => {
+        if (side === 'right') {
+          return { x: anchorX + distance, y: anchorY - height / 2 };
+        }
 
-      if (side === 'left') {
-        return { side, x: anchorX - width - gap, y: anchorY - height / 2 };
-      }
+        if (side === 'left') {
+          return { x: anchorX - width - distance, y: anchorY - height / 2 };
+        }
 
-      if (side === 'top') {
-        return { side, x: anchorX - width / 2, y: anchorY - height - gap };
-      }
+        if (side === 'top') {
+          return { x: anchorX - width / 2, y: anchorY - height - distance };
+        }
 
-      return { side, x: anchorX - width / 2, y: anchorY + gap };
-    });
-    const fitting = candidates.find(({ x, y }) => x >= 8 && y >= 8 && x + width <= this.viewportWidth - 8 && y + height <= this.viewportHeight - 8);
-    const fallback = candidates[0] ?? { side: 'right', x: anchorX + gap, y: anchorY - height / 2 };
-    const placement = fitting ?? fallback;
-    const x = Math.min(Math.max(placement.x, 8), this.viewportWidth - width - 8);
-    const y = Math.min(Math.max(placement.y, 8), this.viewportHeight - height - 8);
+        return { x: anchorX - width / 2, y: anchorY + distance };
+      }),
+    );
+    const placements = candidates.map((candidate) => ({
+      x: Math.min(Math.max(candidate.x, 8), this.viewportWidth - width - 8),
+      y: Math.min(Math.max(candidate.y, 8), this.viewportHeight - height - 8),
+    }));
+    const placement = placements.find(({ x, y }) => !this.badgeOverlaps(x, y, width, height)) ?? placements[0] ?? { x: anchorX + gap, y: anchorY - height / 2 };
+    const x = placement.x;
+    const y = placement.y;
+    const attachX = this.clamp(anchorX, x, x + width);
+    const attachY = this.clamp(anchorY, y, y + height);
+    this.context.strokeStyle = 'rgba(124, 136, 145, 0.55)';
+    this.context.lineWidth = 1.2;
+    this.context.beginPath();
+    this.context.moveTo(anchorX, anchorY);
+    this.context.lineTo(attachX, attachY);
+    this.context.stroke();
+    this.context.fillStyle = 'rgba(124, 136, 145, 0.78)';
+    this.context.beginPath();
+    this.context.arc(anchorX, anchorY, 2.1, 0, Math.PI * 2);
+    this.context.fill();
     this.context.fillStyle = 'rgba(255, 255, 255, 0.95)';
     this.context.strokeStyle = '#b5bdc2';
     this.context.lineWidth = 1;
@@ -755,6 +763,18 @@ export class CanvasRenderer {
     this.context.fillStyle = '#394047';
     this.context.fillText(value, x + paddingX, y + height - paddingY - 2);
     this.context.restore();
+    this.badgeBounds.push({ x, y, width, height });
+  }
+
+  private badgeOverlaps(x: number, y: number, width: number, height: number): boolean {
+    const padding = 6;
+
+    return this.badgeBounds.some((bounds) => {
+      const horizontal = x < bounds.x + bounds.width + padding && x + width + padding > bounds.x;
+      const vertical = y < bounds.y + bounds.height + padding && y + height + padding > bounds.y;
+
+      return horizontal && vertical;
+    });
   }
 
   private gauge(point: PixelPoint, value: number | null, running: boolean): void {

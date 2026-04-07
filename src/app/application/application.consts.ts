@@ -18,8 +18,6 @@ export const APPLICATION_CLASS_NAMES = {
   widgetLabel: 'application__widget-label',
   runtimePanel: 'application__runtime-panel',
   dragGhost: 'application__drag-ghost',
-  valveControls: 'application__valve-controls',
-  valveButton: 'application__valve-button',
   toastStack: 'application__toast-stack',
   toast: 'application__toast',
   toastSuccess: 'application__toast--success',
@@ -34,11 +32,9 @@ export const APPLICATION_LABELS = {
   barometer: 'Барометр',
   stopwatch: 'Секундомер',
   initialStatus: 'Соберите схему Lab6 и подтвердите переход к датчикам.',
-  valveOpen: 'Открыть',
-  valveClose: 'Закрыть',
   assemblyHelper: 'Разместите оборудование на поле и соберите корректную цепочку соединений.',
   instrumentsHelper: 'Перенесите датчики на валидные точки камер и проверьте комплектацию.',
-  runningHelper: 'Следите за показаниями и регулируйте вентиль в процессе работы установки.',
+  runningHelper: 'Следите за показаниями и регулируйте вентиль прямо на схеме, перетаскивая шкалу.',
   assemblyConfirmedToast: 'Сборка подтверждена. Можно переходить к установке датчиков.',
   runningStartedToast: 'Установка запущена.',
   runningStoppedToast: 'Установка остановлена.',
@@ -62,6 +58,5 @@ export const APPLICATION_TEXTS = {
 export const APPLICATION_NUMBERS = {
   framePadding: 24,
   animationFrameDelay: 0,
-  valveStep: 1,
   millisecondsInSecond: 1000,
 } as const;

@@ -13,6 +13,11 @@ export type WorkspaceDragSession = {
   offset: GridPoint;
 };
 
+export type ValveDragSession = {
+  equipmentId: string;
+  pointerId: number;
+};
+
 export type ConnectionSession = {
   equipmentId: string;
   portId: string;
@@ -27,9 +32,6 @@ export type ApplicationElements = {
   primaryButton: HTMLButtonElement;
   barometerValue: HTMLDivElement;
   stopwatchValue: HTMLDivElement;
-  valveControls: HTMLDivElement;
-  valveOpenButton: HTMLButtonElement;
-  valveCloseButton: HTMLButtonElement;
   toastStack: HTMLDivElement;
   dragGhost: HTMLDivElement;
 };

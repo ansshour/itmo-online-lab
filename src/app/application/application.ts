@@ -1,15 +1,16 @@
-import { APPLICATION_CLASS_NAMES, APPLICATION_LABELS, APPLICATION_NUMBERS, APPLICATION_TEXTS } from './application.consts';
+import { APPLICATION_CLASS_NAMES, APPLICATION_LABELS, APPLICATION_TEXTS } from './application.consts';
 import type {
   ApplicationElements,
   ConnectionSession,
   PaletteDragSession,
+  ValveDragSession,
   WorkspaceDragSession,
 } from './application.types';
 import { LAB6_CONFIG } from '../../config/lab6/lab6.config';
 import type { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
 import type { GridPoint, PixelPoint } from '../../domain/grid/grid.types';
 import { Lab6Laboratory } from '../../domain/lab6/lab6-laboratory';
-import type { ConnectionFailureReason, SensorInstallFailureReason } from '../../domain/lab6/lab6-laboratory.types';
+import type { ConnectionFailureReason, EquipmentPlacement, SensorInstallFailureReason } from '../../domain/lab6/lab6-laboratory.types';
 import { CanvasRenderer } from '../../rendering/canvas/canvas-renderer';
 import type { ConnectionPreview, PlacementPreview, SensorPreview } from '../../rendering/canvas/canvas-renderer.types';
 
@@ -34,6 +35,8 @@ export class Application {
   private paletteDrag: PaletteDragSession | null;
 
   private workspaceDrag: WorkspaceDragSession | null;
+
+  private valveDrag: ValveDragSession | null;
 
   private connection: ConnectionSession | null;
 
@@ -68,6 +71,7 @@ export class Application {
     this.renderer = new CanvasRenderer(this.elements.canvas, this.laboratory.getGrid());
     this.paletteDrag = null;
     this.workspaceDrag = null;
+    this.valveDrag = null;
     this.connection = null;
     this.placementPreview = null;
     this.sensorPreview = null;
@@ -90,7 +94,6 @@ export class Application {
 
   private bind(): void {
     this.bindPrimary();
-    this.bindValve();
     this.bindCanvas();
     this.bindWindow();
   }
@@ -104,18 +107,6 @@ export class Application {
         this.notify(this.successToast(stage), 'success');
       }
 
-      this.refresh();
-    });
-  }
-
-  private bindValve(): void {
-    this.elements.valveOpenButton.addEventListener('click', () => {
-      this.laboratory.valve(APPLICATION_NUMBERS.valveStep);
-      this.refresh();
-    });
-
-    this.elements.valveCloseButton.addEventListener('click', () => {
-      this.laboratory.valve(-APPLICATION_NUMBERS.valveStep);
       this.refresh();
     });
   }
@@ -182,10 +173,15 @@ export class Application {
         const item = this.laboratory.item(point);
 
         if (item?.kind === 'valve') {
+          this.valveDrag = {
+            equipmentId: item.id,
+            pointerId: event.pointerId,
+          };
           this.selectedItemId = item.id;
           this.selectedConnectionId = '';
           this.connectionPreview = null;
-          this.laboratory.valve(APPLICATION_NUMBERS.valveStep);
+          this.elements.canvas.setPointerCapture(event.pointerId);
+          this.updateValveFromPointer(item, event);
           this.refresh();
 
           return;
@@ -199,6 +195,21 @@ export class Application {
     });
 
     this.elements.canvas.addEventListener('pointermove', (event) => {
+      if (this.valveDrag) {
+        const item = this.laboratory.snapshot().items.find((entry) => entry.id === this.valveDrag?.equipmentId) ?? null;
+
+        this.hoveredPort = null;
+        this.hoveredItemId = item?.id ?? '';
+
+        if (item) {
+          this.updateValveFromPointer(item, event);
+        }
+
+        this.refresh();
+
+        return;
+      }
+
       const point = this.gridPoint(event);
       const hovered = this.laboratory.item(point);
       const hoveredPort = this.laboratory.stageValue() === 'assembly' ? this.portAtEvent(event) : null;
@@ -248,6 +259,18 @@ export class Application {
         return;
       }
 
+      if (this.valveDrag && event.pointerId === this.valveDrag.pointerId) {
+        if (this.elements.canvas.hasPointerCapture(event.pointerId)) {
+          this.elements.canvas.releasePointerCapture(event.pointerId);
+        }
+
+        this.valveDrag = null;
+        this.clearSelection();
+        this.refresh();
+
+        return;
+      }
+
       const point = this.gridPoint(event);
       const stage = this.laboratory.stageValue();
 
@@ -284,11 +307,16 @@ export class Application {
       this.placementPreview = null;
       this.sensorPreview = null;
       this.connectionPreview = null;
+      this.clearSelection();
       this.hoveredPort = stage === 'assembly' ? this.portAtEvent(event) : null;
       this.refresh();
     });
 
     this.elements.canvas.addEventListener('pointerleave', () => {
+      if (this.valveDrag) {
+        return;
+      }
+
       this.hoveredItemId = '';
       this.hoveredPort = null;
 
@@ -361,6 +389,7 @@ export class Application {
       this.paletteDrag = null;
       this.placementPreview = null;
       this.sensorPreview = null;
+      this.clearSelection();
       this.elements.dragGhost.style.opacity = '0';
       this.refresh();
     });
@@ -385,6 +414,7 @@ export class Application {
     this.elements.primaryButton.textContent = snapshot.primaryLabel;
     this.elements.primaryButton.disabled = !running && !canAdvance.valid;
     this.elements.primaryButton.classList.toggle(APPLICATION_CLASS_NAMES.primaryButtonSecondary, running);
+    this.elements.canvas.style.cursor = this.canvasCursor(snapshot);
     this.elements.barometerValue.textContent = snapshot.measurements
       ? `${snapshot.measurements.barometer.toFixed(0)} ${APPLICATION_TEXTS.barometerUnit}`
       : `0 ${APPLICATION_TEXTS.barometerUnit}`;
@@ -393,7 +423,6 @@ export class Application {
       : '00';
     this.elements.runtimePanel.hidden = !running;
     this.elements.sidebarList.hidden = running;
-    this.elements.valveControls.hidden = !running;
     this.palette(snapshot);
     this.renderToasts();
     this.renderer.render({
@@ -432,6 +461,11 @@ export class Application {
 
       button.innerHTML = `<strong>${entry.label}</strong><span>${entry.remaining} ${APPLICATION_TEXTS.sensorCount}</span>`;
       button.addEventListener('pointerdown', (event) => {
+        this.clearSelection();
+        this.connection = null;
+        this.connectionPreview = null;
+        this.workspaceDrag = null;
+        this.valveDrag = null;
         this.paletteDrag = {
           kind: entry.kind,
           category: entry.category,
@@ -528,9 +562,6 @@ export class Application {
     const primaryButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="primary-button"]');
     const barometerValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="barometer-value"]');
     const stopwatchValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="stopwatch-value"]');
-    const valveControls = this.rootElement.querySelector<HTMLDivElement>('[data-element="valve-controls"]');
-    const valveOpenButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="valve-open"]');
-    const valveCloseButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="valve-close"]');
     const toastStack = this.rootElement.querySelector<HTMLDivElement>('[data-element="toast-stack"]');
     const dragGhost = this.rootElement.querySelector<HTMLDivElement>('[data-element="drag-ghost"]');
 
@@ -543,9 +574,6 @@ export class Application {
       !primaryButton ||
       !barometerValue ||
       !stopwatchValue ||
-      !valveControls ||
-      !valveOpenButton ||
-      !valveCloseButton ||
       !toastStack ||
       !dragGhost
     ) {
@@ -561,9 +589,6 @@ export class Application {
       primaryButton,
       barometerValue,
       stopwatchValue,
-      valveControls,
-      valveOpenButton,
-      valveCloseButton,
       toastStack,
       dragGhost,
     };
@@ -593,10 +618,6 @@ export class Application {
             <section class="${APPLICATION_CLASS_NAMES.widget}">
               <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.stopwatch}</div>
               <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="stopwatch-value"></div>
-            </section>
-            <section class="${APPLICATION_CLASS_NAMES.valveControls}" data-element="valve-controls" hidden>
-              <button class="${APPLICATION_CLASS_NAMES.valveButton}" data-element="valve-close" type="button">${APPLICATION_LABELS.valveClose}</button>
-              <button class="${APPLICATION_CLASS_NAMES.valveButton}" data-element="valve-open" type="button">${APPLICATION_LABELS.valveOpen}</button>
             </section>
           </div>
         </aside>
@@ -732,6 +753,7 @@ export class Application {
 
     return APPLICATION_LABELS.runtimePanel;
   }
+
   private label(kind: EquipmentKind | SensorKind): string {
 
     if (kind in LAB6_CONFIG.equipment) {
@@ -743,8 +765,30 @@ export class Application {
 
   private gridPoint(event: PointerEvent): GridPoint {
     const point = this.relative(event);
-    
+
     return this.laboratory.getGrid().snap(point);
+  }
+
+  private updateValveFromPointer(item: EquipmentPlacement, event: PointerEvent): void {
+    const position = this.valvePositionFromPointer(item, this.relative(event));
+
+    this.laboratory.setValvePosition(position);
+  }
+
+  private valvePositionFromPointer(item: EquipmentPlacement, point: PixelPoint): number {
+    const tileSize = this.laboratory.getGrid().getTileSize();
+    const origin = this.laboratory.getGrid().point({ tileX: item.tileX, tileY: item.tileY });
+    const width = item.tileWidth * tileSize;
+    const height = item.tileHeight * tileSize;
+    const centerX = origin.x + width * 0.5;
+    const centerY = origin.y + height * 0.18;
+    const angle = Math.atan2(point.y - centerY, point.x - centerX);
+    const minAngle = -Math.PI * 0.75;
+    const maxAngle = Math.PI * 0.75;
+    const clampedAngle = Math.min(Math.max(angle, minAngle), maxAngle);
+    const ratio = (clampedAngle - minAngle) / (maxAngle - minAngle);
+
+    return Math.round(ratio * 10);
   }
 
   private canvasPoint(event: PointerEvent): GridPoint | null {
@@ -853,6 +897,25 @@ export class Application {
     }
 
     return [...visible];
+  }
+
+  private canvasCursor(snapshot: ReturnType<Lab6Laboratory['snapshot']>): string {
+    if (this.valveDrag) {
+      return 'grabbing';
+    }
+
+    const hovered = snapshot.items.find((item) => item.id === this.hoveredItemId) ?? null;
+
+    if (snapshot.stage === 'running' && hovered?.kind === 'valve') {
+      return 'grab';
+    }
+
+    return 'default';
+  }
+
+  private clearSelection(): void {
+    this.selectedItemId = '';
+    this.selectedConnectionId = '';
   }
 
   private samePort(left: ConnectionSession, right: ConnectionSession): boolean {

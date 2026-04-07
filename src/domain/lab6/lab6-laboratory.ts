@@ -362,6 +362,27 @@ export class Lab6Laboratory {
     }
   }
 
+  public setValvePosition(position: number): void {
+    if (this.stage !== 'running') {
+      return;
+    }
+
+    const next = Math.min(
+      Math.max(Math.round(position), LAB6_NUMBERS.closedValvePosition),
+      LAB6_NUMBERS.openedValvePosition,
+    );
+
+    if (next === this.valvePosition) {
+      return;
+    }
+
+    this.valvePosition = next;
+
+    if (this.measurements) {
+      this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, this.measurements.stopwatchSeconds);
+    }
+  }
+
   public port(point: GridPoint): { equipmentId: string; portId: string } | null {
     for (const item of this.items) {
       const definition = this.config.equipment[item.kind];

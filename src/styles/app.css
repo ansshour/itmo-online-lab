@@ -104,11 +104,11 @@ body {
   border: 1px solid rgba(135, 157, 168, 0.22);
   background: var(--canvas-bg);
   display: block;
+  touch-action: none;
 }
 
 .application__primary-button,
-.application__palette-item,
-.application__valve-button {
+.application__palette-item {
   border: 1px solid rgba(124, 148, 160, 0.4);
   border-radius: var(--radius-md);
   color: var(--text-primary);
@@ -122,8 +122,7 @@ body {
 }
 
 .application__primary-button:not(:disabled):hover,
-.application__palette-item:hover,
-.application__valve-button:hover {
+.application__palette-item:hover {
   transform: translateY(-1px);
 }
 
@@ -233,18 +232,6 @@ body {
   font-size: 30px;
   font-weight: 700;
   line-height: 1.1;
-}
-
-.application__valve-controls {
-  display: flex;
-  gap: 10px;
-}
-
-.application__valve-button {
-  flex: 1;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.88);
-  font: inherit;
 }
 
 .application__toast-stack {
