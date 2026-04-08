@@ -42,8 +42,8 @@ export interface ApplicationElements {
   sidebarCaption: HTMLParagraphElement;
   sidebarList: HTMLDivElement;
   gasSelect: HTMLSelectElement;
+  gasControl: HTMLLabelElement;
   gasHint: HTMLParagraphElement;
-  runtimePanel: HTMLDivElement;
   captureButton: HTMLButtonElement;
   resultsPreview: HTMLDivElement;
   resultsPreviewButton: HTMLButtonElement;
@@ -51,9 +51,11 @@ export interface ApplicationElements {
   resultsModal: HTMLDivElement;
   resultsModalBackdrop: HTMLDivElement;
   resultsModalClose: HTMLButtonElement;
+  modalResultsTabs: HTMLDivElement;
   modalResultsTable: HTMLDivElement;
   modalResultsChart: HTMLDivElement;
   primaryButton: HTMLButtonElement;
+  workspaceMeta: HTMLDivElement;
   barometerValue: HTMLDivElement;
   toastStack: HTMLDivElement;
   dragGhost: HTMLDivElement;

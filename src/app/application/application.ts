@@ -1,4 +1,5 @@
 import { APPLICATION_CLASS_NAMES, APPLICATION_LABELS, APPLICATION_TEXTS } from './application.consts';
+import { ApplicationLatex } from './application.latex';
 import { ApplicationResults } from './application.results';
 import { ToastKind } from './application.types';
 import type {
@@ -14,6 +15,7 @@ import { GasModelKind } from '../../config/lab6/gases/lab6.gases.types';
 import { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
 import type { GridPoint, PixelPoint } from '../../domain/grid/grid.types';
 import { Lab6Laboratory } from '../../domain/lab6/lab6.laboratory';
+import type { GasOption, LaboratorySnapshot } from '../../domain/lab6/lab6.laboratory.types';
 import {
   ConnectionFailureReason,
   LaboratoryStage,
@@ -29,6 +31,8 @@ export class Application {
   private readonly laboratory: Lab6Laboratory;
 
   private readonly renderer: CanvasRenderer;
+
+  private readonly latex: ApplicationLatex;
 
   private readonly results: ApplicationResults;
 
@@ -66,14 +70,33 @@ export class Application {
 
   private resultsModalOpen: boolean;
 
+  private resultsModalGasFilterId: string | null;
+
+  private renderedGasHint: string;
+
+  private renderedResultsPreviewMarkup: string;
+
+  private renderedResultsTabsMarkup: string;
+
+  private renderedResultsTableMarkup: string;
+
+  private renderedResultsChartMarkup: string;
+
+  private domDirty: boolean;
+
+  private canvasDirty: boolean;
+
+  private frameScheduled: boolean;
+
   public constructor(rootElement: HTMLDivElement) {
     this.rootElement = rootElement;
     this.laboratory = new Lab6Laboratory();
+    this.latex = new ApplicationLatex();
+    this.results = new ApplicationResults(this.latex);
     this.rootElement.innerHTML = this.template(this.laboratory.snapshot());
     this.rootElement.className = APPLICATION_CLASS_NAMES.root;
     this.elements = this.resolve();
     this.renderer = new CanvasRenderer(this.elements.canvas, this.laboratory.getGrid());
-    this.results = new ApplicationResults();
     this.paletteDrag = null;
     this.workspaceDrag = null;
     this.valveDrag = null;
@@ -90,12 +113,20 @@ export class Application {
     this.toastNodes = new Map();
     this.leavingToastIds = new Set();
     this.resultsModalOpen = false;
+    this.resultsModalGasFilterId = null;
+    this.renderedGasHint = '';
+    this.renderedResultsPreviewMarkup = '';
+    this.renderedResultsTabsMarkup = '';
+    this.renderedResultsTableMarkup = '';
+    this.renderedResultsChartMarkup = '';
+    this.domDirty = true;
+    this.canvasDirty = true;
+    this.frameScheduled = false;
   }
 
   public start(): void {
     this.bind();
     this.refresh();
-    this.loop();
   }
 
   private bind(): void {
@@ -116,38 +147,57 @@ export class Application {
         this.notify(this.successToast(stage), ToastKind.Success);
       }
 
-      this.refresh();
+      this.refresh(true, true);
     });
   }
 
   private bindGasSelection(): void {
     this.elements.gasSelect.addEventListener('change', () => {
       this.laboratory.setGas(this.elements.gasSelect.value);
-      this.refresh();
+      this.refresh(true, true);
     });
   }
 
   private bindCaptureMeasurement(): void {
     this.elements.captureButton.addEventListener('click', () => {
       this.laboratory.captureMeasurement();
-      this.refresh();
+      this.refresh(true, true);
     });
   }
 
   private bindResultsModal(): void {
     this.elements.resultsPreviewButton.addEventListener('click', () => {
+      this.resultsModalGasFilterId = null;
       this.resultsModalOpen = true;
-      this.refresh();
+      this.refresh(true, true);
     });
 
     this.elements.resultsModalClose.addEventListener('click', () => {
       this.resultsModalOpen = false;
-      this.refresh();
+      this.refresh(true, true);
     });
 
     this.elements.resultsModalBackdrop.addEventListener('click', () => {
       this.resultsModalOpen = false;
       this.refresh();
+    });
+
+    this.elements.modalResultsTabs.addEventListener('click', (event) => {
+      const target = event.target;
+
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      const button = target.closest<HTMLButtonElement>('[data-gas-tab]');
+
+      if (!button) {
+        return;
+      }
+
+      const gasId = button.dataset.gasTab ?? '';
+      this.resultsModalGasFilterId = gasId === '__all__' ? null : gasId;
+      this.refresh(true, true);
     });
   }
 
@@ -174,7 +224,7 @@ export class Application {
             path: [origin],
           };
 
-          this.refresh();
+          this.refresh(false, true);
 
           return;
         }
@@ -192,7 +242,7 @@ export class Application {
           this.selectedItemId = item.id;
           this.selectedConnectionId = '';
           this.connectionPreview = null;
-          this.refresh();
+          this.refresh(false, true);
 
           return;
         }
@@ -203,7 +253,7 @@ export class Application {
           this.selectedConnectionId = connection.id;
           this.selectedItemId = '';
           this.connectionPreview = null;
-          this.refresh();
+          this.refresh(false, true);
 
           return;
         }
@@ -220,26 +270,33 @@ export class Application {
           this.selectedItemId = item.id;
           this.selectedConnectionId = '';
           this.connectionPreview = null;
-          this.refresh();
+          this.refresh(true, true);
 
           return;
         }
       }
 
+      const shouldRefresh = this.selectedItemId !== '' || this.selectedConnectionId !== '' || this.connectionPreview !== null;
+
       this.selectedItemId = '';
       this.selectedConnectionId = '';
       this.connectionPreview = null;
-      this.refresh();
+
+      if (shouldRefresh) {
+        this.refresh(false, true);
+      }
     });
 
     this.elements.canvas.addEventListener('pointermove', (event) => {
-
       const point = this.gridPoint(event);
       const hovered = this.laboratory.item(point);
-      const hoveredPort = this.laboratory.stageValue() === LaboratoryStage.Assembly ? this.portAtEvent(event) : null;
+      const nextHoveredPort = this.laboratory.stageValue() === LaboratoryStage.Assembly ? this.portAtEvent(event) : null;
+      const nextHoveredItemId = hovered?.id ?? nextHoveredPort?.equipmentId ?? '';
+      let domChanged = !this.sameHoverPort(this.hoveredPort, nextHoveredPort) || this.hoveredItemId !== nextHoveredItemId;
+      let canvasChanged = domChanged;
 
-      this.hoveredPort = hoveredPort;
-      this.hoveredItemId = hovered?.id ?? hoveredPort?.equipmentId ?? '';
+      this.hoveredPort = nextHoveredPort;
+      this.hoveredItemId = nextHoveredItemId;
 
       if (this.workspaceDrag) {
         const target = {
@@ -250,32 +307,43 @@ export class Application {
         const equipment = this.laboratory.snapshot().items.find((item) => item.id === this.workspaceDrag?.equipmentId);
 
         if (equipment) {
-          this.placementPreview = {
+          const nextPlacementPreview = {
             kind: equipment.kind,
             point: target,
             valid: this.laboratory.canMove(equipment.id, target),
           };
+
+          if (!this.samePlacementPreview(this.placementPreview, nextPlacementPreview)) {
+            this.placementPreview = nextPlacementPreview;
+            canvasChanged = true;
+          }
         }
       }
 
       if (this.connection) {
         const from = this.connection;
         const origin = this.absolutePort(from.equipmentId, from.portId);
-        const targetPort = hoveredPort && !this.samePort(from, hoveredPort) ? hoveredPort : null;
+        const targetPort = nextHoveredPort && !this.samePort(from, nextHoveredPort) ? nextHoveredPort : null;
 
         if (origin) {
           const target = targetPort ? this.absolutePort(targetPort.equipmentId, targetPort.portId) ?? point : point;
           const path = targetPort
             ? this.laboratory.previewConnectionBetweenPorts(from.equipmentId, from.portId, targetPort.equipmentId, targetPort.portId)
             : this.laboratory.previewConnectionPath(origin, target);
-
-          this.connectionPreview = {
+          const nextConnectionPreview = {
             path: path.length > 0 ? path : [origin, target],
           };
+
+          if (!this.sameConnectionPreview(this.connectionPreview, nextConnectionPreview)) {
+            this.connectionPreview = nextConnectionPreview;
+            canvasChanged = true;
+          }
         }
       }
 
-      this.refresh();
+      if (domChanged || canvasChanged) {
+        this.refresh(domChanged, canvasChanged);
+      }
     });
 
     this.elements.canvas.addEventListener('pointerup', (event) => {
@@ -322,11 +390,18 @@ export class Application {
       this.connectionPreview = null;
       this.clearSelection();
       this.hoveredPort = stage === LaboratoryStage.Assembly ? this.portAtEvent(event) : null;
-      this.refresh();
+      this.refresh(true, true);
     });
 
     this.elements.canvas.addEventListener('pointerleave', () => {
       if (this.valveDrag) {
+        return;
+      }
+
+      const domChanged = this.hoveredItemId !== '' || this.hoveredPort !== null;
+      const canvasChanged = domChanged || (this.connection !== null && this.connectionPreview !== null);
+
+      if (!canvasChanged) {
         return;
       }
 
@@ -337,7 +412,7 @@ export class Application {
         this.connectionPreview = null;
       }
 
-      this.refresh();
+      this.refresh(domChanged, true);
     });
   }
 
@@ -351,10 +426,12 @@ export class Application {
         };
 
         this.dragGhost();
-        this.previewFromPalette(event);
-      }
+        const previewChanged = this.previewFromPalette(event);
 
-      this.refresh();
+        if (previewChanged) {
+          this.refresh(false, true);
+        }
+      }
     });
 
     window.addEventListener('keydown', (event) => {
@@ -372,7 +449,7 @@ export class Application {
         this.connection = null;
         this.connectionPreview = null;
         event.preventDefault();
-        this.refresh();
+        this.refresh(true, true);
 
         return;
       }
@@ -387,7 +464,7 @@ export class Application {
       this.connection = null;
       this.connectionPreview = null;
       event.preventDefault();
-      this.refresh();
+      this.refresh(true, true);
     });
 
     window.addEventListener('pointerup', (event) => {
@@ -408,28 +485,74 @@ export class Application {
       this.sensorPreview = null;
       this.clearSelection();
       this.elements.dragGhost.style.opacity = '0';
-      this.refresh();
+      this.refresh(true, true);
     });
   }
 
   private loop(): void {
-    const now = performance.now();
+    this.frameScheduled = false;
 
-    this.laboratory.tick(now);
-    this.pruneToasts(now);
-    this.refresh();
-    window.requestAnimationFrame(() => this.loop());
+    const now = performance.now();
+    const stateChanged = this.laboratory.tick(now);
+    const toastsChanged = this.pruneToasts(now);
+
+    if (stateChanged) {
+      this.domDirty = true;
+      this.canvasDirty = true;
+    }
+
+    if (toastsChanged) {
+      this.domDirty = true;
+    }
+
+    if (!this.domDirty && !this.canvasDirty && !this.shouldAnimateCanvas()) {
+      return;
+    }
+
+    const snapshot = this.laboratory.snapshot();
+
+    if (this.domDirty) {
+      this.renderDom(snapshot);
+      this.domDirty = false;
+    }
+
+    if (this.canvasDirty || this.shouldAnimateCanvas()) {
+      this.renderCanvas(snapshot);
+      this.canvasDirty = false;
+    }
+
+    if (this.shouldKeepLooping()) {
+      this.scheduleFrame();
+    }
   }
 
-  private refresh(): void {
-    const snapshot = this.laboratory.snapshot();
+  private refresh(domChanged = true, canvasChanged = true): void {
+    this.domDirty = this.domDirty || domChanged;
+    this.canvasDirty = this.canvasDirty || canvasChanged;
+
+    if (!this.domDirty && !this.canvasDirty) {
+      return;
+    }
+
+    this.scheduleFrame();
+  }
+
+  private renderDom(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
     const running = snapshot.stage === LaboratoryStage.Running;
     const canAdvance = this.laboratory.canAdvance();
+    const gasHintMarkup = this.gasHint(snapshot);
 
     this.elements.sidebarHeader.textContent = this.sidebarTitle(snapshot.stage);
     this.elements.sidebarCaption.textContent = this.sidebarHelper(snapshot.stage);
     this.elements.gasSelect.value = snapshot.selectedGasId;
-    this.elements.gasHint.textContent = this.gasHint(snapshot);
+
+    if (gasHintMarkup !== this.renderedGasHint) {
+      this.elements.gasHint.innerHTML = gasHintMarkup;
+      this.renderedGasHint = gasHintMarkup;
+    }
+
+    this.elements.gasControl.hidden = !running;
+    this.elements.gasHint.hidden = !running;
     this.elements.primaryButton.textContent = snapshot.primaryLabel;
     this.elements.primaryButton.disabled = !running && !canAdvance.valid;
     this.elements.primaryButton.classList.toggle(APPLICATION_CLASS_NAMES.primaryButtonSecondary, running);
@@ -437,14 +560,19 @@ export class Application {
     this.elements.barometerValue.textContent = snapshot.measurements
       ? `${snapshot.measurements.barometer.toFixed(0)} ${APPLICATION_TEXTS.barometerUnit}`
       : `0 ${APPLICATION_TEXTS.barometerUnit}`;
-    this.elements.runtimePanel.hidden = !running;
+    this.elements.workspaceMeta.hidden = !running;
+    this.elements.captureButton.hidden = !running;
     this.elements.sidebarList.hidden = running;
     this.elements.resultsPreview.hidden = !running;
     this.elements.resultsModal.hidden = !running || !this.resultsModalOpen;
+    this.elements.resultsPreviewButton.disabled = snapshot.measurementRecords.length === 0;
     this.palette(snapshot);
     this.renderResultsPreview(snapshot);
     this.renderResultsModal(snapshot);
     this.renderToasts();
+  }
+
+  private renderCanvas(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
     this.renderer.render({
       snapshot,
       placementPreview: this.placementPreview,
@@ -459,9 +587,28 @@ export class Application {
     });
   }
 
+  private scheduleFrame(): void {
+    if (this.frameScheduled) {
+      return;
+    }
+
+    this.frameScheduled = true;
+    window.requestAnimationFrame(() => this.loop());
+  }
+
+  private shouldAnimateCanvas(): boolean {
+    return this.laboratory.stageValue() === LaboratoryStage.Running || this.connectionPreview !== null;
+  }
+
+  private shouldKeepLooping(): boolean {
+    return this.shouldAnimateCanvas() || this.toasts.length > 0;
+  }
+
   private palette(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
     if (snapshot.stage === LaboratoryStage.Running) {
-      this.elements.sidebarList.innerHTML = '';
+      if (this.elements.sidebarList.childElementCount > 0) {
+        this.elements.sidebarList.innerHTML = '';
+      }
 
       return;
     }
@@ -499,36 +646,51 @@ export class Application {
     }
   }
 
-  private previewFromPalette(event: PointerEvent): void {
+  private previewFromPalette(event: PointerEvent): boolean {
     if (!this.paletteDrag) {
-      return;
+      return false;
     }
 
     const point = this.canvasPoint(event);
 
     if (!point) {
+      const changed = this.placementPreview !== null || this.sensorPreview !== null;
+
       this.placementPreview = null;
       this.sensorPreview = null;
 
-      return;
+      return changed;
     }
 
     if (this.paletteDrag.category === PaletteCategory.Equipment) {
       const kind = this.paletteDrag.kind as EquipmentKind;
-
-      this.placementPreview = {
+      const nextPlacementPreview = {
         kind,
         point,
         valid: this.laboratory.canPlace(kind, point),
       };
+      const changed = !this.samePlacementPreview(this.placementPreview, nextPlacementPreview) || this.sensorPreview !== null;
+
+      this.placementPreview = nextPlacementPreview;
+      this.sensorPreview = null;
+
+      return changed;
     }
 
     if (this.paletteDrag.category === PaletteCategory.Sensor) {
-      this.sensorPreview = {
+      const nextSensorPreview = {
         kind: this.paletteDrag.kind as SensorKind,
         point,
       };
+      const changed = !this.sameSensorPreview(this.sensorPreview, nextSensorPreview) || this.placementPreview !== null;
+
+      this.sensorPreview = nextSensorPreview;
+      this.placementPreview = null;
+
+      return changed;
     }
+
+    return false;
   }
 
   private dropEquipment(event: PointerEvent): void {
@@ -579,8 +741,8 @@ export class Application {
     const sidebarCaption = this.rootElement.querySelector<HTMLParagraphElement>('[data-element="sidebar-caption"]');
     const sidebarList = this.rootElement.querySelector<HTMLDivElement>('[data-element="sidebar-list"]');
     const gasSelect = this.rootElement.querySelector<HTMLSelectElement>('[data-element="gas-select"]');
+    const gasControl = this.rootElement.querySelector<HTMLLabelElement>('[data-element="gas-control"]');
     const gasHint = this.rootElement.querySelector<HTMLParagraphElement>('[data-element="gas-hint"]');
-    const runtimePanel = this.rootElement.querySelector<HTMLDivElement>('[data-element="runtime-panel"]');
     const captureButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="capture-button"]');
     const resultsPreview = this.rootElement.querySelector<HTMLDivElement>('[data-element="results-preview"]');
     const resultsPreviewButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="results-preview-button"]');
@@ -588,9 +750,11 @@ export class Application {
     const resultsModal = this.rootElement.querySelector<HTMLDivElement>('[data-element="results-modal"]');
     const resultsModalBackdrop = this.rootElement.querySelector<HTMLDivElement>('[data-element="results-modal-backdrop"]');
     const resultsModalClose = this.rootElement.querySelector<HTMLButtonElement>('[data-element="results-modal-close"]');
+    const modalResultsTabs = this.rootElement.querySelector<HTMLDivElement>('[data-element="modal-results-tabs"]');
     const modalResultsTable = this.rootElement.querySelector<HTMLDivElement>('[data-element="modal-results-table"]');
     const modalResultsChart = this.rootElement.querySelector<HTMLDivElement>('[data-element="modal-results-chart"]');
     const primaryButton = this.rootElement.querySelector<HTMLButtonElement>('[data-element="primary-button"]');
+    const workspaceMeta = this.rootElement.querySelector<HTMLDivElement>('[data-element="workspace-meta"]');
     const barometerValue = this.rootElement.querySelector<HTMLDivElement>('[data-element="barometer-value"]');
     const toastStack = this.rootElement.querySelector<HTMLDivElement>('[data-element="toast-stack"]');
     const dragGhost = this.rootElement.querySelector<HTMLDivElement>('[data-element="drag-ghost"]');
@@ -601,8 +765,8 @@ export class Application {
       !sidebarCaption ||
       !sidebarList ||
       !gasSelect ||
+      !gasControl ||
       !gasHint ||
-      !runtimePanel ||
       !captureButton ||
       !resultsPreview ||
       !resultsPreviewButton ||
@@ -610,9 +774,11 @@ export class Application {
       !resultsModal ||
       !resultsModalBackdrop ||
       !resultsModalClose ||
+      !modalResultsTabs ||
       !modalResultsTable ||
       !modalResultsChart ||
       !primaryButton ||
+      !workspaceMeta ||
       !barometerValue ||
       !toastStack ||
       !dragGhost
@@ -626,8 +792,8 @@ export class Application {
       sidebarCaption,
       sidebarList,
       gasSelect,
+      gasControl,
       gasHint,
-      runtimePanel,
       captureButton,
       resultsPreview,
       resultsPreviewButton,
@@ -635,9 +801,11 @@ export class Application {
       resultsModal,
       resultsModalBackdrop,
       resultsModalClose,
+      modalResultsTabs,
       modalResultsTable,
       modalResultsChart,
       primaryButton,
+      workspaceMeta,
       barometerValue,
       toastStack,
       dragGhost,
@@ -649,16 +817,27 @@ export class Application {
       <div class="${APPLICATION_CLASS_NAMES.frame}">
         <section class="${APPLICATION_CLASS_NAMES.workspace}">
           <div class="${APPLICATION_CLASS_NAMES.workspaceTitle}">${APPLICATION_LABELS.title}</div>
+          <div class="${APPLICATION_CLASS_NAMES.workspaceMeta}" data-element="workspace-meta" hidden>
+            <div class="${APPLICATION_CLASS_NAMES.workspaceMetaItem}">
+              <div class="${APPLICATION_CLASS_NAMES.workspaceMetaLabel}">${APPLICATION_LABELS.barometer}</div>
+              <div class="${APPLICATION_CLASS_NAMES.workspaceMetaValue}" data-element="barometer-value">0 ${APPLICATION_TEXTS.barometerUnit}</div>
+            </div>
+          </div>
           <div class="${APPLICATION_CLASS_NAMES.canvasShell}">
             <canvas data-element="canvas"></canvas>
           </div>
-          <button class="${APPLICATION_CLASS_NAMES.primaryButton}" data-element="primary-button" type="button"></button>
+          <div class="${APPLICATION_CLASS_NAMES.workspaceControls}">
+            <button class="${APPLICATION_CLASS_NAMES.primaryButton}" data-element="primary-button" type="button"></button>
+          </div>
+          <div class="${APPLICATION_CLASS_NAMES.workspaceActions}">
+            <button class="${APPLICATION_CLASS_NAMES.secondaryButton}" data-element="capture-button" type="button" hidden>${APPLICATION_LABELS.captureMeasurement}</button>
+          </div>
         </section>
         <aside class="${APPLICATION_CLASS_NAMES.sidebar}">
-          <section>
+          <section class="${APPLICATION_CLASS_NAMES.sidebarMain}">
             <h2 class="${APPLICATION_CLASS_NAMES.panelTitle}" data-element="sidebar-header"></h2>
             <p class="${APPLICATION_CLASS_NAMES.panelCaption}" data-element="sidebar-caption"></p>
-            <label class="${APPLICATION_CLASS_NAMES.gasControl}">
+            <label class="${APPLICATION_CLASS_NAMES.gasControl}" data-element="gas-control">
               <span class="${APPLICATION_CLASS_NAMES.gasControlLabel}">${APPLICATION_LABELS.gasLabel}</span>
               <select class="${APPLICATION_CLASS_NAMES.gasSelect}" data-element="gas-select">
                 ${this.gasSelectOptions(snapshot)}
@@ -667,18 +846,11 @@ export class Application {
             <p class="${APPLICATION_CLASS_NAMES.gasHint}" data-element="gas-hint"></p>
             <div class="${APPLICATION_CLASS_NAMES.sidebarList}" data-element="sidebar-list"></div>
           </section>
-          <div class="${APPLICATION_CLASS_NAMES.runtimePanel}" data-element="runtime-panel" hidden>
-            <section class="${APPLICATION_CLASS_NAMES.widget}">
-              <div class="${APPLICATION_CLASS_NAMES.widgetLabel}">${APPLICATION_LABELS.barometer}</div>
-              <div class="${APPLICATION_CLASS_NAMES.widgetValue}" data-element="barometer-value"></div>
-            </section>
-            <div class="${APPLICATION_CLASS_NAMES.runtimeActions}">
-              <button class="${APPLICATION_CLASS_NAMES.secondaryButton}" data-element="capture-button" type="button">${APPLICATION_LABELS.captureMeasurement}</button>
-            </div>
-          </div>
           <div class="${APPLICATION_CLASS_NAMES.resultsPreview}" data-element="results-preview" hidden>
             <div class="${APPLICATION_CLASS_NAMES.resultsPanel}" data-element="results-panel"></div>
-            <button class="${APPLICATION_CLASS_NAMES.resultsPreviewButton}" data-element="results-preview-button" type="button">${APPLICATION_LABELS.openResults}</button>
+            <div class="${APPLICATION_CLASS_NAMES.resultsPreviewActions}">
+              <button class="${APPLICATION_CLASS_NAMES.resultsPreviewButton}" data-element="results-preview-button" type="button">${APPLICATION_LABELS.openResults}</button>
+            </div>
           </div>
         </aside>
         <div class="${APPLICATION_CLASS_NAMES.modal}" data-element="results-modal" hidden>
@@ -689,12 +861,13 @@ export class Application {
               <button class="${APPLICATION_CLASS_NAMES.modalClose}" data-element="results-modal-close" type="button">${APPLICATION_LABELS.closeResults}</button>
             </div>
             <div class="${APPLICATION_CLASS_NAMES.modalBody}">
+              <div class="${APPLICATION_CLASS_NAMES.modalTabs}" data-element="modal-results-tabs"></div>
               <section class="${APPLICATION_CLASS_NAMES.resultsSection}">
                 <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.measurementsTable}</h3>
                 <div class="${APPLICATION_CLASS_NAMES.resultsTable}" data-element="modal-results-table"></div>
               </section>
               <section class="${APPLICATION_CLASS_NAMES.resultsSection}">
-                <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.velocityChart}</h3>
+                <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${this.results.velocityChartTitle()}</h3>
                 <div class="${APPLICATION_CLASS_NAMES.chart}" data-element="modal-results-chart"></div>
               </section>
             </div>
@@ -775,8 +948,13 @@ export class Application {
     this.toastIdentifier += 1;
   }
 
-  private pruneToasts(now: number): void {
-    this.toasts = this.toasts.filter((toast) => toast.expiresAt > now);
+  private pruneToasts(now: number): boolean {
+    const nextToasts = this.toasts.filter((toast) => toast.expiresAt > now);
+    const changed = nextToasts.length !== this.toasts.length;
+
+    this.toasts = nextToasts;
+
+    return changed;
   }
 
   private renderToasts(): void {
@@ -822,14 +1000,101 @@ export class Application {
   }
 
   private renderResultsPreview(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
-    this.elements.resultsPanel.innerHTML = this.results.preview(snapshot.measurementRecords);
+    const activeGasRecords = this.recordsByGas(snapshot.measurementRecords, snapshot.selectedGasId);
+    const activeGasOption = this.activeGasOption(snapshot);
+    const markup = this.results.preview({
+      records: activeGasRecords,
+      gasLabel: activeGasOption?.label ?? snapshot.selectedGasId,
+      hasOtherMeasurements: snapshot.measurementRecords.length > activeGasRecords.length,
+    });
+
+    if (markup === this.renderedResultsPreviewMarkup) {
+      return;
+    }
+
+    this.elements.resultsPanel.innerHTML = markup;
+    this.renderedResultsPreviewMarkup = markup;
   }
 
   private renderResultsModal(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
-    const records = snapshot.measurementRecords;
+    const availableTabs = this.modalTabs(snapshot);
+    const activeFilter = this.normalizeModalFilter(availableTabs);
+    const tabsMarkup = this.renderModalTabsMarkup(availableTabs, activeFilter);
+    const records = activeFilter === null
+      ? snapshot.measurementRecords
+      : this.recordsByGas(snapshot.measurementRecords, activeFilter);
+    const tableMarkup = this.results.table(records);
+    const chartMarkup = this.results.chart(records, false);
 
-    this.elements.modalResultsTable.innerHTML = this.results.table(records);
-    this.elements.modalResultsChart.innerHTML = this.results.chart(records, false);
+    if (tabsMarkup !== this.renderedResultsTabsMarkup) {
+      this.elements.modalResultsTabs.innerHTML = tabsMarkup;
+      this.renderedResultsTabsMarkup = tabsMarkup;
+    }
+
+    if (tableMarkup !== this.renderedResultsTableMarkup) {
+      this.elements.modalResultsTable.innerHTML = tableMarkup;
+      this.renderedResultsTableMarkup = tableMarkup;
+    }
+
+    if (chartMarkup !== this.renderedResultsChartMarkup) {
+      this.elements.modalResultsChart.innerHTML = chartMarkup;
+      this.renderedResultsChartMarkup = chartMarkup;
+    }
+  }
+
+  private recordsByGas(records: readonly import('../../domain/lab6/lab6.measurements.types').Lab6MeasurementRecord[], gasId: string) {
+    return records.filter((record) => record.gasId === gasId);
+  }
+
+  private activeGasOption(snapshot: LaboratorySnapshot): GasOption | undefined {
+    return snapshot.gasOptions.find((option) => option.id === snapshot.selectedGasId);
+  }
+
+  private modalTabs(snapshot: LaboratorySnapshot): readonly GasOption[] {
+    const measuredGasIds = new Set(snapshot.measurementRecords.map((record) => record.gasId));
+
+    return snapshot.gasOptions.filter((option) => measuredGasIds.has(option.id));
+  }
+
+  private normalizeModalFilter(availableTabs: readonly GasOption[]): string | null {
+    if (this.resultsModalGasFilterId === null) {
+      return null;
+    }
+
+    if (availableTabs.some((option) => option.id === this.resultsModalGasFilterId)) {
+      return this.resultsModalGasFilterId;
+    }
+
+    this.resultsModalGasFilterId = null;
+
+    return null;
+  }
+
+  private renderModalTabsMarkup(availableTabs: readonly GasOption[], activeFilter: string | null): string {
+    const allTab = `
+      <button
+        class="${APPLICATION_CLASS_NAMES.modalTab} ${activeFilter === null ? APPLICATION_CLASS_NAMES.modalTabActive : ''}"
+        type="button"
+        data-gas-tab="__all__"
+        aria-pressed="${activeFilter === null}"
+      >
+        ${APPLICATION_LABELS.modalScopeAll}
+      </button>
+    `;
+    const gasTabs = availableTabs
+      .map((option) => `
+        <button
+          class="${APPLICATION_CLASS_NAMES.modalTab} ${activeFilter === option.id ? APPLICATION_CLASS_NAMES.modalTabActive : ''}"
+          type="button"
+          data-gas-tab="${option.id}"
+          aria-pressed="${activeFilter === option.id}"
+        >
+          ${option.label}
+        </button>
+      `)
+      .join('');
+
+    return `${allTab}${gasTabs}`;
   }
 
   private sidebarTitle(stage: ReturnType<Lab6Laboratory['stageValue']>): string {
@@ -858,10 +1123,10 @@ export class Application {
     }
 
     if (gas.model === GasModelKind.Ideal) {
-      return 'Расчёт без поправки на сжимаемость: Z = 1.';
+      return `Расчёт без поправки на сжимаемость: ${this.latex.inline(String.raw`Z = 1`)}.`;
     }
 
-    return 'Для реального газа учитывается сжимаемость по уравнению Пенга–Робинсона.';
+    return `Для реального газа учитывается коэффициент сжимаемости ${this.latex.inline(String.raw`Z`)} по уравнению Пенга–Робинсона.`;
   }
 
   private label(kind: EquipmentKind | SensorKind): string {
@@ -1005,6 +1270,61 @@ export class Application {
   private clearSelection(): void {
     this.selectedItemId = '';
     this.selectedConnectionId = '';
+  }
+
+  private samePlacementPreview(left: PlacementPreview | null, right: PlacementPreview | null): boolean {
+    if (left === right) {
+      return true;
+    }
+
+    if (!left || !right) {
+      return false;
+    }
+
+    return left.kind === right.kind
+      && left.valid === right.valid
+      && left.point.tileX === right.point.tileX
+      && left.point.tileY === right.point.tileY;
+  }
+
+  private sameSensorPreview(left: SensorPreview | null, right: SensorPreview | null): boolean {
+    if (left === right) {
+      return true;
+    }
+
+    if (!left || !right) {
+      return false;
+    }
+
+    return left.kind === right.kind
+      && left.point.tileX === right.point.tileX
+      && left.point.tileY === right.point.tileY;
+  }
+
+  private sameConnectionPreview(left: ConnectionPreview | null, right: ConnectionPreview | null): boolean {
+    if (left === right) {
+      return true;
+    }
+
+    if (!left || !right || left.path.length !== right.path.length) {
+      return false;
+    }
+
+    return left.path.every(
+      (point, index) => point.tileX === right.path[index]?.tileX && point.tileY === right.path[index]?.tileY,
+    );
+  }
+
+  private sameHoverPort(left: ConnectionSession | null, right: ConnectionSession | null): boolean {
+    if (left === right) {
+      return true;
+    }
+
+    if (!left || !right) {
+      return false;
+    }
+
+    return this.samePort(left, right);
   }
 
   private samePort(left: ConnectionSession, right: ConnectionSession): boolean {

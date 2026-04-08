@@ -381,18 +381,20 @@ export class Lab6Laboratory {
     return result;
   }
 
-  public tick(now: number): void {
+  public tick(now: number): boolean {
     if (!this.stageMachine.isRunning() || !this.measurements) {
-      return;
+      return false;
     }
 
     const seconds = Math.max(0, Math.floor((now - this.startedAt) / 1000));
 
     if (this.measurements.updatedAtSeconds === seconds) {
-      return;
+      return false;
     }
 
     this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, seconds, this.selectedGasId);
+
+    return true;
   }
 
   public valve(step: number): void {
