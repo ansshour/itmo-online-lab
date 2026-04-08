@@ -25,6 +25,7 @@ applyTo: "**/*.spec*.ts"
 - Используй AAA во всех тестах без исключений.
 - Первый `describe` — имя сущности.
 - Второй `describe` — имя метода.
+- Второй `describe` всегда начинается с `#`.
 - Третий `describe` — контекст или сценарий.
 - Максимум три уровня `describe`.
 - `it` называется в формате `should ...`.
@@ -45,6 +46,8 @@ applyTo: "**/*.spec*.ts"
 ## AAA
 
 - Каждый `it` обязан явно содержать стадии Arrange, Act, Assert.
+- В каждом `it` после Arrange должна быть ровно 1 пустая строка.
+- В каждом `it` после Act должна быть ровно 1 пустая строка.
 - Arrange должен быть минимальным.
 - Act должен быть очевидным.
 - Assert должен быть коротким и прямым.
@@ -96,7 +99,7 @@ applyTo: "**/*.spec*.ts"
 
 ```typescript
 describe(EntityName, () => {
-  describe('method', () => {
+  describe('#method', () => {
     describe('context', () => {
       it('should ...', async () => {
         const preparation = createPreparation();
