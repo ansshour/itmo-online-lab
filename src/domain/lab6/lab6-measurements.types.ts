@@ -19,6 +19,9 @@ export type Lab6Measurements = {
 
 export type Lab6MeasurementRecord = {
   index: number;
+  gasId: string;
+  gasLabel: string;
+  gasModel: 'ideal' | 'real';
   pressureHighBar: number;
   pressureLowBar: number;
   flowLitersPerMinute: number;

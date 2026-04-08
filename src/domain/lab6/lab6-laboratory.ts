@@ -108,6 +108,9 @@ export class Lab6Laboratory {
       ...this.measurementRecords,
       {
         index: this.measurementRecords.length + 1,
+        gasId: this.measurements.gasId,
+        gasLabel: this.measurements.gasLabel,
+        gasModel: this.measurements.gasModel,
         pressureHighBar: this.measurements.pressureHighDisplay,
         pressureLowBar: this.measurements.pressureLowDisplay,
         flowLitersPerMinute: this.measurements.volume * 1000 * 60,

@@ -830,7 +830,7 @@ export class Application {
       </section>
       <section class="${APPLICATION_CLASS_NAMES.resultsSection}">
         <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.velocityChart}</h3>
-        <div class="${APPLICATION_CLASS_NAMES.chart}" data-element="results-chart">${this.resultsChartMarkup(previewRecords, true)}</div>
+        <div class="${APPLICATION_CLASS_NAMES.chart}" data-element="results-chart">${this.resultsChartMarkup(records, true)}</div>
       </section>
     `;
   }
@@ -852,6 +852,7 @@ export class Application {
         <thead>
           <tr>
             <th>№</th>
+            <th>Газ</th>
             <th>p1, бар</th>
             <th>p2, бар</th>
             <th>Q, л/м</th>
@@ -863,6 +864,9 @@ export class Application {
               (record) => `
                 <tr>
                   <td>${record.index}</td>
+                  <td>
+                    <span class="${APPLICATION_CLASS_NAMES.gasBadge} ${this.gasBadgeClassName(record.gasModel)}">${record.gasLabel}</span>
+                  </td>
                   <td>${record.pressureHighBar.toFixed(2)}</td>
                   <td>${record.pressureLowBar.toFixed(2)}</td>
                   <td>${record.flowLitersPerMinute.toFixed(2)}</td>
@@ -899,24 +903,44 @@ export class Application {
     const axisY = height - paddingBottom;
     const axisX = paddingLeft;
     const pointRadius = compact ? 4 : 5;
-    const strokeWidth = compact ? 3 : 4;
+    const strokeWidth = compact ? 2.5 : 4;
     const labelFontSize = compact ? 11 : 14;
     const tickFontSize = compact ? 10 : 12;
     const xTicks = 5 as number;
     const yTicks = 5 as number;
+    const gasPalette = this.gasPalette(records);
+    const groupedRecords = Array.from(
+      records.reduce((groups, record) => {
+        const current = groups.get(record.gasId) ?? [];
 
-    const coordinates = sorted.map((record) => {
-      const x = paddingLeft + ((record.pressureRatio - minX) / Math.max(maxX - minX, 1e-6)) * plotWidth;
-      const y = axisY - ((record.velocity - minY) / Math.max(maxY - minY, 1e-6)) * plotHeight;
+        current.push(record);
+        groups.set(record.gasId, current);
+
+        return groups;
+      }, new Map<string, typeof records>()),
+    );
+
+    const coordinatesByGas = groupedRecords.map(([gasId, gasRecords]) => {
+      const gasSorted = [...gasRecords].sort((left, right) => left.pressureRatio - right.pressureRatio);
 
       return {
-        x,
-        y,
-        record,
+        gasId,
+        gasLabel: gasSorted[0]?.gasLabel ?? gasId,
+        gasModel: gasSorted[0]?.gasModel ?? 'real',
+        color: gasPalette.get(gasId) ?? '#1f7a6a',
+        points: gasSorted.map((record) => {
+          const x = paddingLeft + ((record.pressureRatio - minX) / Math.max(maxX - minX, 1e-6)) * plotWidth;
+          const y = axisY - ((record.velocity - minY) / Math.max(maxY - minY, 1e-6)) * plotHeight;
+
+          return {
+            x,
+            y,
+            record,
+          };
+        }),
       };
     });
 
-    const points = coordinates.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
     const xAxisTitle = 'Отношение абсолютных давлений p2abs / p1abs';
     const yAxisTitle = 'Скорость истечения w, м/с';
     const xTickMarks = Array.from({ length: xTicks }, (_, index) => {
@@ -943,22 +967,47 @@ export class Application {
         </g>
       `;
     }).join('');
+    const legendMarkup = coordinatesByGas
+      .map(
+        ({ gasLabel, gasModel, color }) => `
+          <div class="${APPLICATION_CLASS_NAMES.chartLegendItem}">
+            <span class="${APPLICATION_CLASS_NAMES.chartLegendSwatch}" style="--legend-color: ${color}"></span>
+            <span class="${APPLICATION_CLASS_NAMES.gasBadge} ${this.gasBadgeClassName(gasModel)}">${gasLabel}</span>
+          </div>
+        `,
+      )
+      .join('');
 
     return `
+      <div class="${APPLICATION_CLASS_NAMES.chartLegend}">${legendMarkup}</div>
       <svg viewBox="0 0 ${width} ${height}" class="${APPLICATION_CLASS_NAMES.chart}" aria-label="${APPLICATION_LABELS.velocityChart}">
         <line x1="${axisX}" y1="${axisY}" x2="${width - paddingRight}" y2="${axisY}" stroke="rgba(102,123,134,0.45)" stroke-width="1.5" />
         <line x1="${axisX}" y1="${paddingTop}" x2="${axisX}" y2="${axisY}" stroke="rgba(102,123,134,0.45)" stroke-width="1.5" />
         ${xTickMarks}
         ${yTickMarks}
-        <polyline fill="none" stroke="#1f7a6a" stroke-width="${strokeWidth}" points="${points}" />
-        ${coordinates
+        ${coordinatesByGas
+          .map(({ color, points }) => {
+            const polylinePoints = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+
+            if (points.length < 2) {
+              return '';
+            }
+
+            return `<polyline fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" points="${polylinePoints}" />`;
+          })
+          .join('')}
+        ${coordinatesByGas
           .map(
-            ({ x, y, record }: { x: number; y: number; record: (typeof sorted)[number] }) => `
-              <g>
-                <title>Скорость: ${record.velocity.toFixed(2)} м/с; Отношение: ${record.pressureRatio.toFixed(3)}</title>
-                <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${pointRadius}" fill="#15594d" />
-              </g>
-            `,
+            ({ color, points }) => points
+              .map(
+                ({ x, y, record }) => `
+                  <g>
+                    <title>${record.gasLabel}: скорость ${record.velocity.toFixed(2)} м/с; отношение ${record.pressureRatio.toFixed(3)}</title>
+                    <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${pointRadius}" fill="${color}" />
+                  </g>
+                `,
+              )
+              .join(''),
           )
           .join('')}
         <text x="${(paddingLeft + plotWidth / 2).toFixed(1)}" y="${(height - 10).toFixed(1)}" text-anchor="middle" font-size="${labelFontSize}" fill="#667b86">${xAxisTitle}</text>
@@ -1156,5 +1205,16 @@ export class Application {
     }
 
     return target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+  }
+
+  private gasBadgeClassName(model: 'ideal' | 'real'): string {
+    return model === 'ideal' ? APPLICATION_CLASS_NAMES.gasBadgeIdeal : APPLICATION_CLASS_NAMES.gasBadgeReal;
+  }
+
+  private gasPalette(records: ReturnType<Lab6Laboratory['snapshot']>['measurementRecords']): Map<string, string> {
+    const palette = ['#1f7a6a', '#2f7ed8', '#d88608', '#8f5a06', '#7b61ff', '#c75146', '#0f9d8a', '#5f6c76'];
+    const gasIds = [...new Set(records.map((record) => record.gasId))];
+
+    return new Map(gasIds.map((gasId, index) => [gasId, palette[index % palette.length]]));
   }
 }

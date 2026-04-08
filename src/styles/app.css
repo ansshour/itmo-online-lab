@@ -344,6 +344,12 @@ body {
   overflow: auto;
 }
 
+.application__modal-body .application__results-section:first-child .application__results-table {
+  max-height: min(42vh, 520px);
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
 .application__results-table table {
   width: 100%;
   border-collapse: collapse;
@@ -355,11 +361,58 @@ body {
   padding: 8px 6px;
   border-bottom: 1px solid rgba(135, 157, 168, 0.18);
   text-align: right;
+  vertical-align: middle;
 }
 
 .application__results-table th:first-child,
-.application__results-table td:first-child {
+.application__results-table td:first-child,
+.application__results-table th:nth-child(2),
+.application__results-table td:nth-child(2) {
   text-align: left;
+}
+
+.application__gas-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 148, 160, 0.24);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.application__gas-badge--ideal {
+  background: rgba(47, 126, 216, 0.12);
+  color: #245d96;
+}
+
+.application__gas-badge--real {
+  background: rgba(31, 122, 106, 0.12);
+  color: #15594d;
+}
+
+.application__chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.application__chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.application__chart-legend-swatch {
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--legend-color);
+  flex: 0 0 auto;
 }
 
 .application__chart {
