@@ -219,60 +219,246 @@ export class CanvasRenderer {
   }
 
   private drawCompressor(x: number, y: number, width: number, height: number, running: boolean, time: number): void {
-    const bodyX = x + width * 0.14;
-    const bodyY = y + height * 0.16;
-    const bodySize = Math.min(width * 0.52, height * 0.56);
-    const bodyRadius = bodySize / 2;
-    const bodyCenterX = bodyX + bodyRadius;
-    const bodyCenterY = bodyY + bodyRadius;
-    const outletY = y + height * 0.4;
-    const impellerAngle = running ? time / 180 : Math.PI / 18;
+    const skidX = x + width * 0.04;
+    const skidY = y + height * 0.8;
+    const skidWidth = width * 0.92;
+    const skidHeight = height * 0.12;
+    const bodyX = x + width * 0.18;
+    const bodyY = y + height * 0.46;
+    const bodyWidth = width * 0.42;
+    const bodyHeight = height * 0.2;
+    const bodyRadius = bodyHeight * 0.5;
+    const intakeRadius = bodyHeight * 0.62;
+    const intakeCenterX = bodyX + bodyHeight * 0.08;
+    const intakeCenterY = bodyY + bodyHeight * 0.5;
+    const outletCenterX = x + width;
+    const outletCenterY = y + height * 0.40;
+    const outletStubWidth = width * 0.16;
+    const outletStubHeight = bodyHeight * 0.72;
+    const outletStubX = outletCenterX - outletStubWidth;
+    const outletStubY = outletCenterY - outletStubHeight * 0.5;
+    const outletCapRadius = outletStubHeight * 0.5;
+    const chamberX = bodyX + bodyWidth * 0.18;
+    const chamberY = y + height * 0.14;
+    const chamberWidth = width * 0.22;
+    const chamberHeight = height * 0.28;
+    const chamberCapHeight = height * 0.04;
+    const pipeWidth = width * 0.08;
+    const pipeX = bodyX + bodyWidth * 0.08;
+    const pipeTopY = chamberY + chamberHeight * 0.18;
+    const pipeBottomY = bodyY + bodyHeight * 0.08;
+    const panelX = x + width * 0.66;
+    const panelY = y + height * 0.28;
+    const panelWidth = width * 0.22;
+    const panelHeight = height * 0.38;
+    const gaugeBaseY = panelY - height * 0.06;
+    const gaugeRadius = width * 0.045;
+    const gaugeCenters = [panelX + panelWidth * 0.18, panelX + panelWidth * 0.5, panelX + panelWidth * 0.82];
+    const impellerAngle = running ? time / 140 : Math.PI / 10;
+    const vibration = running ? Math.sin(time / 95) * height * 0.006 : 0;
+    const pulse = running ? (Math.sin(time / 240) + 1) / 2 : 0;
+    const flowOffset = running ? (time / 18) % (bodyWidth * 0.34) : 0;
+
+    this.context.save();
+    this.context.translate(0, vibration);
+
+    this.roundedRect(skidX, skidY, skidWidth, skidHeight, skidHeight * 0.18);
+    this.context.fillStyle = this.linearGradient(skidX, skidY, skidX, skidY + skidHeight, ['#2f353a', '#111417']);
+    this.context.fill();
+    this.context.stroke();
+
+    this.context.fillStyle = '#1f252a';
+    this.context.fillRect(skidX + skidWidth * 0.08, skidY + skidHeight * 0.18, skidWidth * 0.84, skidHeight * 0.18);
+
+    this.context.fillStyle = '#0f1418';
+    this.context.fillRect(bodyX + bodyWidth * 0.08, skidY + skidHeight * 0.02, width * 0.04, height * 0.02);
+    this.context.fillRect(panelX + panelWidth * 0.18, skidY + skidHeight * 0.02, width * 0.04, height * 0.02);
+
+    this.context.fillStyle = '#0f1418';
+    this.context.fillRect(bodyX + bodyWidth * 0.18, bodyY + bodyHeight, width * 0.04, height * 0.14);
+    this.context.fillRect(bodyX + bodyWidth * 0.72, bodyY + bodyHeight, width * 0.04, height * 0.14);
+    this.context.fillRect(panelX + panelWidth * 0.18, panelY + panelHeight, width * 0.035, height * 0.14);
+    this.context.fillRect(panelX + panelWidth * 0.72, panelY + panelHeight, width * 0.035, height * 0.14);
+
+    this.context.fillStyle = this.linearGradient(bodyX, bodyY, bodyX + bodyWidth, bodyY + bodyHeight, ['#1f8df0', '#0f6fc8', '#2aa2ff']);
+    this.roundedRect(bodyX, bodyY, bodyWidth, bodyHeight, bodyRadius);
+    this.context.fill();
+    this.context.stroke();
+
+    this.context.beginPath();
+    this.context.arc(intakeCenterX, intakeCenterY, intakeRadius, 0, Math.PI * 2);
+    this.context.fillStyle = this.linearGradient(intakeCenterX - intakeRadius, intakeCenterY - intakeRadius, intakeCenterX + intakeRadius, intakeCenterY + intakeRadius, ['#0f6fc8', '#2aa2ff']);
+    this.context.fill();
+    this.context.stroke();
+
+    this.roundedRect(outletStubX, outletStubY, outletStubWidth, outletStubHeight, outletStubHeight * 0.34);
+    this.context.fillStyle = this.linearGradient(
+      outletStubX,
+      outletStubY,
+      outletStubX + outletStubWidth,
+      outletStubY + outletStubHeight,
+      ['#8f99a1', '#d8e0e5', '#6f7981'],
+    );
+    this.context.fill();
+    this.context.stroke();
+
+    this.context.beginPath();
+    this.context.arc(outletCenterX, outletCenterY, outletCapRadius, 0, Math.PI * 2);
+    this.context.fillStyle = this.linearGradient(
+      outletCenterX - outletCapRadius,
+      outletCenterY - outletCapRadius,
+      outletCenterX + outletCapRadius,
+      outletCenterY + outletCapRadius,
+      ['#dce3e8', '#8b959d', '#5f6971'],
+    );
+    this.context.fill();
+    this.context.stroke();
+
+    this.context.fillStyle = '#4f5961';
+    this.context.beginPath();
+    this.context.arc(outletCenterX, outletCenterY, outletCapRadius * 0.42, 0, Math.PI * 2);
+    this.context.fill();
+
+    this.context.save();
+    this.context.beginPath();
+    this.context.arc(intakeCenterX, intakeCenterY, intakeRadius * 0.72, 0, Math.PI * 2);
+    this.context.clip();
+    this.context.fillStyle = 'rgba(255, 255, 255, 0.14)';
+    this.context.fillRect(intakeCenterX - intakeRadius * 0.18, intakeCenterY - intakeRadius, intakeRadius * 0.28, intakeRadius * 2);
+    this.context.restore();
+
+    this.context.strokeStyle = running ? '#d7f1ff' : 'rgba(255, 255, 255, 0.28)';
+    this.context.lineWidth = 1.4;
+    for (let index = 0; index < 5; index += 1) {
+      const angle = (Math.PI * 2 * index) / 5 + impellerAngle;
+
+      this.context.beginPath();
+      this.context.moveTo(intakeCenterX, intakeCenterY);
+      this.context.lineTo(
+        intakeCenterX + Math.cos(angle) * intakeRadius * 0.58,
+        intakeCenterY + Math.sin(angle) * intakeRadius * 0.58,
+      );
+      this.context.stroke();
+    }
+
+    this.context.fillStyle = '#083f73';
+    this.context.beginPath();
+    this.context.arc(intakeCenterX, intakeCenterY, intakeRadius * 0.14, 0, Math.PI * 2);
+    this.context.fill();
+
+    this.roundedRect(chamberX, chamberY, chamberWidth, chamberHeight, width * 0.02);
+    this.context.fillStyle = this.linearGradient(chamberX, chamberY, chamberX + chamberWidth, chamberY + chamberHeight, ['#1f8df0', '#0f6fc8']);
+    this.context.fill();
+    this.context.stroke();
+
+    this.roundedRect(chamberX - width * 0.01, chamberY - chamberCapHeight * 0.7, chamberWidth + width * 0.02, chamberCapHeight, chamberCapHeight * 0.3);
+    this.context.fillStyle = '#0f6fc8';
+    this.context.fill();
+    this.context.stroke();
+
+    this.roundedRect(pipeX, pipeTopY, pipeWidth, pipeBottomY - pipeTopY, pipeWidth * 0.35);
+    this.context.fillStyle = this.linearGradient(pipeX, pipeTopY, pipeX + pipeWidth, pipeBottomY, ['#f5d11f', '#d8a900']);
+    this.context.fill();
+    this.context.stroke();
+
+    this.roundedRect(pipeX - width * 0.005, pipeTopY - height * 0.02, pipeWidth * 1.7, height * 0.06, height * 0.02);
+    this.context.fillStyle = this.linearGradient(pipeX, pipeTopY, pipeX + pipeWidth * 1.7, pipeTopY, ['#f5d11f', '#d8a900']);
+    this.context.fill();
+    this.context.stroke();
+
+    this.context.fillStyle = '#0f6fc8';
+    this.roundedRect(bodyX + bodyWidth * 0.72, bodyY + bodyHeight * 0.08, width * 0.12, height * 0.16, height * 0.03);
+    this.context.fill();
+    this.context.stroke();
+
+    this.roundedRect(panelX, panelY, panelWidth, panelHeight, width * 0.02);
+    this.context.fillStyle = this.linearGradient(panelX, panelY, panelX + panelWidth, panelY + panelHeight, ['#f2f3f1', '#cfd3d0']);
+    this.context.fill();
+    this.context.stroke();
+
+    this.context.strokeStyle = '#9aa19d';
+    this.context.lineWidth = 1;
+    this.context.beginPath();
+    this.context.moveTo(panelX + panelWidth * 0.5, panelY + panelHeight * 0.08);
+    this.context.lineTo(panelX + panelWidth * 0.5, panelY + panelHeight * 0.92);
+    this.context.moveTo(panelX + panelWidth * 0.08, panelY + panelHeight * 0.52);
+    this.context.lineTo(panelX + panelWidth * 0.92, panelY + panelHeight * 0.52);
+    this.context.stroke();
+
+    this.roundedRect(panelX + panelWidth * 0.18, panelY + panelHeight * 0.58, panelWidth * 0.26, panelHeight * 0.16, 4);
+    this.context.fillStyle = '#4f5a5f';
+    this.context.fill();
+    this.context.stroke();
+
+    const buttonRadius = width * 0.012;
+    const buttonRows = [panelY + panelHeight * 0.66, panelY + panelHeight * 0.8];
+    const buttonColumns = [panelX + panelWidth * 0.58, panelX + panelWidth * 0.7, panelX + panelWidth * 0.82];
+
+    for (const row of buttonRows) {
+      for (const column of buttonColumns) {
+        this.context.fillStyle = column === buttonColumns[2] && row === buttonRows[0] ? '#c75146' : '#6f8f95';
+        this.context.beginPath();
+        this.context.arc(column, row, buttonRadius, 0, Math.PI * 2);
+        this.context.fill();
+        this.context.stroke();
+      }
+    }
+
+    this.context.strokeStyle = '#1f8df0';
+    this.context.lineWidth = 2;
+    for (const gaugeCenterX of gaugeCenters) {
+      this.context.beginPath();
+      this.context.moveTo(gaugeCenterX, panelY);
+      this.context.lineTo(gaugeCenterX, gaugeBaseY + gaugeRadius * 0.9);
+      this.context.stroke();
+
+      this.context.fillStyle = this.linearGradient(gaugeCenterX - gaugeRadius, gaugeBaseY - gaugeRadius, gaugeCenterX + gaugeRadius, gaugeBaseY + gaugeRadius, ['#1f8df0', '#0f6fc8']);
+      this.context.beginPath();
+      this.context.arc(gaugeCenterX, gaugeBaseY, gaugeRadius, 0, Math.PI * 2);
+      this.context.fill();
+      this.context.stroke();
+
+      this.context.fillStyle = '#f7fafb';
+      this.context.beginPath();
+      this.context.arc(gaugeCenterX, gaugeBaseY, gaugeRadius * 0.72, 0, Math.PI * 2);
+      this.context.fill();
+      this.context.stroke();
+
+      const gaugeAngle = -Math.PI * 0.72 + pulse * Math.PI * 0.44 + gaugeCenterX * 0.002;
+      this.context.strokeStyle = '#6f7d87';
+      this.context.lineWidth = 1.2;
+      this.context.beginPath();
+      this.context.moveTo(gaugeCenterX, gaugeBaseY);
+      this.context.lineTo(gaugeCenterX + Math.cos(gaugeAngle) * gaugeRadius * 0.48, gaugeBaseY + Math.sin(gaugeAngle) * gaugeRadius * 0.48);
+      this.context.stroke();
+    }
+
+    this.context.save();
+    this.roundedRect(bodyX + bodyWidth * 0.04, bodyY + bodyHeight * 0.08, bodyWidth * 0.9, bodyHeight * 0.84, bodyRadius * 0.8);
+    this.context.clip();
+    this.context.fillStyle = 'rgba(255, 255, 255, 0.12)';
+    this.context.fillRect(bodyX - bodyWidth * 0.2 + flowOffset, bodyY + bodyHeight * 0.08, bodyWidth * 0.16, bodyHeight * 0.84);
+    this.context.restore();
 
     if (running) {
       this.context.save();
-      this.context.strokeStyle = 'rgba(213, 155, 53, 0.24)';
-      this.context.lineWidth = 3;
+      this.context.strokeStyle = `rgba(111, 201, 255, ${0.18 + pulse * 0.18})`;
+      this.context.lineWidth = 2;
+      this.context.setLineDash([width * 0.05, width * 0.04]);
+      this.context.lineDashOffset = -(time / 16);
       this.context.beginPath();
-      this.context.arc(bodyCenterX, bodyCenterY, bodyRadius * 1.08, 0, Math.PI * 2);
+      this.context.moveTo(bodyX + bodyWidth * 0.18, bodyY + bodyHeight * 0.5);
+      this.context.lineTo(outletCenterX - outletCapRadius * 0.2, bodyY + bodyHeight * 0.5);
       this.context.stroke();
+      this.context.setLineDash([]);
       this.context.restore();
     }
 
-    this.context.fillStyle = this.linearGradient(bodyX, bodyY, bodyX + bodySize, bodyY + bodySize, ['#fbfdfd', '#ccd5db', '#eef3f4']);
-    this.context.beginPath();
-    this.context.arc(bodyCenterX, bodyCenterY, bodyRadius, 0, Math.PI * 2);
-    this.context.fill();
-    this.context.stroke();
+    this.context.fillStyle = 'rgba(255, 255, 255, 0.18)';
+    this.context.fillRect(chamberX + chamberWidth * 0.08, chamberY + chamberHeight * 0.08, chamberWidth * 0.12, chamberHeight * 0.84);
+    this.context.fillRect(panelX + panelWidth * 0.06, panelY + panelHeight * 0.06, panelWidth * 0.08, panelHeight * 0.88);
 
-    this.context.strokeStyle = running ? '#d59b35' : '#70808c';
-    this.context.lineWidth = 1.5;
-    for (let index = 0; index < 6; index += 1) {
-      const angle = (Math.PI * 2 * index) / 6 + impellerAngle;
-
-      this.context.beginPath();
-      this.context.moveTo(bodyCenterX, bodyCenterY);
-      this.context.lineTo(bodyCenterX + Math.cos(angle) * bodyRadius * 0.72, bodyCenterY + Math.sin(angle) * bodyRadius * 0.72);
-      this.context.stroke();
-    }
-
-    this.context.strokeStyle = '#394047';
-    this.context.lineWidth = 2;
-    this.roundedRect(x + width * 0.58, y + height * 0.24, width * 0.18, height * 0.42, 8);
-    this.context.fillStyle = this.linearGradient(x + width * 0.58, y, x + width * 0.76, y + height, ['#e1e7ea', '#b4bfc7', '#dce3e8']);
-    this.context.fill();
-    this.context.stroke();
-
-    this.context.strokeStyle = '#51606b';
-    this.context.beginPath();
-    this.context.moveTo(x + width * 0.72, outletY);
-    this.context.lineTo(x + width, outletY);
-    this.context.stroke();
-
-    this.context.fillStyle = '#697781';
-    this.context.fillRect(x + width * 0.16, y + height * 0.76, width * 0.12, height * 0.08);
-    this.context.fillRect(x + width * 0.48, y + height * 0.76, width * 0.12, height * 0.08);
-    this.context.fillStyle = '#505c66';
-    this.context.fillRect(x + width * 0.1, y + height * 0.84, width * 0.62, height * 0.06);
+    this.context.restore();
   }
 
   private drawReceiver(x: number, y: number, width: number, height: number, running: boolean, time: number): void {
