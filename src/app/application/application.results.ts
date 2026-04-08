@@ -71,8 +71,11 @@ export class ApplicationResults {
     const plotHeight = height - paddingTop - paddingBottom;
     const minX = compact ? Math.min(...sorted.map((record) => record.pressureRatio)) : 0.2;
     const maxX = compact ? Math.max(...sorted.map((record) => record.pressureRatio)) : 0.95;
-    const minY = compact ? Math.min(...sorted.map((record) => record.velocity)) : 40;
-    const maxY = compact ? Math.max(...sorted.map((record) => record.velocity)) : 320;
+    const velocityValues = sorted.map((record) => record.velocity);
+    const rawMinY = Math.min(...velocityValues);
+    const rawMaxY = Math.max(...velocityValues);
+    const minY = compact ? rawMinY : Math.min(40, Math.floor(rawMinY / 50) * 50);
+    const maxY = compact ? rawMaxY : Math.max(320, Math.ceil(rawMaxY / 50) * 50);
     const axisY = height - paddingBottom;
     const axisX = paddingLeft;
     const pointRadius = compact ? 4 : 6;
@@ -80,7 +83,9 @@ export class ApplicationResults {
     const labelFontSize = compact ? 11 : 14;
     const tickFontSize = compact ? 10 : 12;
     const xTickValues = compact ? null : [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
-    const yTickValues = compact ? null : [50, 100, 150, 200, 250, 300];
+    const yTickValues = compact
+      ? null
+      : Array.from({ length: Math.floor((maxY - minY) / 50) + 1 }, (_, index) => minY + index * 50).filter((value) => value > minY);
     const xTicks = xTickValues?.length ?? 5;
     const yTicks = yTickValues?.length ?? 5;
     const gasPalette = this.palette(records);
