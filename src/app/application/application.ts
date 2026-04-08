@@ -890,24 +890,26 @@ export class Application {
     const sorted = [...records].sort((left, right) => left.pressureRatio - right.pressureRatio);
     const width = compact ? 320 : 640;
     const height = compact ? 180 : 320;
-    const paddingLeft = compact ? 24 : 56;
+    const paddingLeft = compact ? 24 : 72;
     const paddingRight = compact ? 24 : 28;
-    const paddingTop = compact ? 24 : 28;
-    const paddingBottom = compact ? 24 : 44;
+    const paddingTop = compact ? 24 : 20;
+    const paddingBottom = compact ? 24 : 56;
     const plotWidth = width - paddingLeft - paddingRight;
     const plotHeight = height - paddingTop - paddingBottom;
-    const minX = Math.min(...sorted.map((record) => record.pressureRatio));
-    const maxX = Math.max(...sorted.map((record) => record.pressureRatio));
-    const minY = Math.min(...sorted.map((record) => record.velocity));
-    const maxY = Math.max(...sorted.map((record) => record.velocity));
+    const minX = compact ? Math.min(...sorted.map((record) => record.pressureRatio)) : 0.2;
+    const maxX = compact ? Math.max(...sorted.map((record) => record.pressureRatio)) : 0.95;
+    const minY = compact ? Math.min(...sorted.map((record) => record.velocity)) : 40;
+    const maxY = compact ? Math.max(...sorted.map((record) => record.velocity)) : 320;
     const axisY = height - paddingBottom;
     const axisX = paddingLeft;
-    const pointRadius = compact ? 4 : 5;
-    const strokeWidth = compact ? 2.5 : 4;
+    const pointRadius = compact ? 4 : 6;
+    const strokeWidth = compact ? 2.5 : 3;
     const labelFontSize = compact ? 11 : 14;
     const tickFontSize = compact ? 10 : 12;
-    const xTicks = 5 as number;
-    const yTicks = 5 as number;
+    const xTickValues = compact ? null : [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+    const yTickValues = compact ? null : [50, 100, 150, 200, 250, 300];
+    const xTicks = xTickValues?.length ?? 5;
+    const yTicks = yTickValues?.length ?? 5;
     const gasPalette = this.gasPalette(records);
     const groupedRecords = Array.from(
       records.reduce((groups, record) => {
@@ -929,8 +931,10 @@ export class Application {
         gasModel: gasSorted[0]?.gasModel ?? 'real',
         color: gasPalette.get(gasId) ?? '#1f7a6a',
         points: gasSorted.map((record) => {
-          const x = paddingLeft + ((record.pressureRatio - minX) / Math.max(maxX - minX, 1e-6)) * plotWidth;
-          const y = axisY - ((record.velocity - minY) / Math.max(maxY - minY, 1e-6)) * plotHeight;
+          const clampedPressureRatio = Math.min(Math.max(record.pressureRatio, minX), maxX);
+          const clampedVelocity = Math.min(Math.max(record.velocity, minY), maxY);
+          const x = paddingLeft + ((clampedPressureRatio - minX) / Math.max(maxX - minX, 1e-6)) * plotWidth;
+          const y = axisY - ((clampedVelocity - minY) / Math.max(maxY - minY, 1e-6)) * plotHeight;
 
           return {
             x,
@@ -941,29 +945,29 @@ export class Application {
       };
     });
 
-    const xAxisTitle = 'Отношение абсолютных давлений p2abs / p1abs';
-    const yAxisTitle = 'Скорость истечения w, м/с';
     const xTickMarks = Array.from({ length: xTicks }, (_, index) => {
-      const ratio = xTicks === 1 ? 0 : index / (xTicks - 1);
-      const value = minX + (maxX - minX) * ratio;
+      const value = xTickValues ? xTickValues[index] : minX + (maxX - minX) * (xTicks === 1 ? 0 : index / (xTicks - 1));
+      const ratio = (value - minX) / Math.max(maxX - minX, 1e-6);
       const x = axisX + plotWidth * ratio;
 
       return `
         <g>
+          <line x1="${x.toFixed(1)}" y1="${paddingTop}" x2="${x.toFixed(1)}" y2="${axisY}" stroke="rgba(102,123,134,0.22)" stroke-width="1" />
           <line x1="${x.toFixed(1)}" y1="${axisY}" x2="${x.toFixed(1)}" y2="${(axisY + 6).toFixed(1)}" stroke="rgba(102,123,134,0.45)" stroke-width="1" />
-          <text x="${x.toFixed(1)}" y="${(axisY + 18).toFixed(1)}" text-anchor="middle" font-size="${tickFontSize}" fill="#667b86">${value.toFixed(2)}</text>
+          <text x="${x.toFixed(1)}" y="${(axisY + 24).toFixed(1)}" text-anchor="middle" font-size="${tickFontSize}" fill="#667b86">${value.toFixed(1).replace('.', ',')}</text>
         </g>
       `;
     }).join('');
     const yTickMarks = Array.from({ length: yTicks }, (_, index) => {
-      const ratio = yTicks === 1 ? 0 : index / (yTicks - 1);
-      const value = maxY - (maxY - minY) * ratio;
-      const y = paddingTop + plotHeight * ratio;
+      const value = yTickValues ? yTickValues[index] : maxY - (maxY - minY) * (yTicks === 1 ? 0 : index / (yTicks - 1));
+      const ratio = (value - minY) / Math.max(maxY - minY, 1e-6);
+      const y = axisY - plotHeight * ratio;
 
       return `
         <g>
+          <line x1="${axisX}" y1="${y.toFixed(1)}" x2="${(width - paddingRight).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(102,123,134,0.22)" stroke-width="1" />
           <line x1="${(axisX - 6).toFixed(1)}" y1="${y.toFixed(1)}" x2="${axisX}" y2="${y.toFixed(1)}" stroke="rgba(102,123,134,0.45)" stroke-width="1" />
-          <text x="${(axisX - 10).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="${tickFontSize}" fill="#667b86">${value.toFixed(1)}</text>
+          <text x="${(axisX - 10).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="${tickFontSize}" fill="#667b86">${Math.round(value)}</text>
         </g>
       `;
     }).join('');
@@ -1003,15 +1007,15 @@ export class Application {
                 ({ x, y, record }) => `
                   <g>
                     <title>${record.gasLabel}: скорость ${record.velocity.toFixed(2)} м/с; отношение ${record.pressureRatio.toFixed(3)}</title>
-                    <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${pointRadius}" fill="${color}" />
+                    <rect x="${(x - pointRadius).toFixed(1)}" y="${(y - pointRadius).toFixed(1)}" width="${(pointRadius * 2).toFixed(1)}" height="${(pointRadius * 2).toFixed(1)}" rx="1" fill="none" stroke="${color}" stroke-width="2" />
                   </g>
                 `,
               )
               .join(''),
           )
           .join('')}
-        <text x="${(paddingLeft + plotWidth / 2).toFixed(1)}" y="${(height - 10).toFixed(1)}" text-anchor="middle" font-size="${labelFontSize}" fill="#667b86">${xAxisTitle}</text>
-        <text x="${compact ? 12 : 18}" y="${compact ? 18 : 20}" text-anchor="start" font-size="${labelFontSize}" fill="#667b86">${yAxisTitle}</text>
+        <text x="${(paddingLeft + plotWidth / 2).toFixed(1)}" y="${(height - 12).toFixed(1)}" text-anchor="middle" font-size="${labelFontSize}" fill="#111">Beta</text>
+        <text x="${compact ? 12 : 22}" y="${compact ? 18 : 24}" text-anchor="start" font-size="${labelFontSize}" fill="#111">w, м/с</text>
       </svg>
     `;
   }

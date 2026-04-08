@@ -18,15 +18,17 @@ export class Lab6Physics {
     const pressureHighAbsolute = this.absolute(row.p1, row.B);
     const pressureLowAbsolute = pressureHighAbsolute * row.b;
     const pressureHighAbsoluteVaried = this.vary(pressureHighAbsolute, 0, 3);
-    const pressureLowAbsoluteVaried = this.vary(pressureLowAbsolute, 3, 0);
-    const volume = this.volume(row.p1, row.b, row.D, gasId);
+    const pressureLowAbsoluteVaried = safePosition === 0
+      ? pressureHighAbsoluteVaried
+      : this.vary(pressureLowAbsolute, 3, 0);
     const pressureHigh = this.relative(pressureHighAbsoluteVaried, row.B);
     const pressureLow = this.relative(pressureLowAbsoluteVaried, row.B);
     const pressureHighDisplay = pressureHighAbsoluteVaried / 100;
     const pressureLowDisplay = pressureLowAbsoluteVaried / 100;
-    const pressureRatio = pressureLowAbsolute / Math.max(pressureHighAbsolute, this.epsilon);
-    const velocity = this.velocity(volume, row.D);
-    const volumeVaried = this.vary(volume, 3, 3);
+    const pressureRatio = pressureLowAbsoluteVaried / Math.max(pressureHighAbsoluteVaried, this.epsilon);
+    const volume = this.volume(pressureHighAbsoluteVaried, pressureRatio, row.D, gasId, row.t1);
+    const volumeVaried = safePosition === 0 ? 0 : this.vary(volume, 3, 3);
+    const velocity = this.velocity(volumeVaried, row.D);
 
     return {
       barometer: row.B,
@@ -62,11 +64,18 @@ export class Lab6Physics {
     return value * (1 + deviation * 0.01);
   }
 
-  private volume(pressureHighRelative: number, ratio: number, diameter: number, gasId: string): number {
+  private volume(
+    pressureHighAbsolute: number,
+    ratio: number,
+    diameter: number,
+    gasId: string,
+    temperatureCelsius: number,
+  ): number {
     const gas = getLab6Gas(gasId);
     const area = (Math.PI * diameter * diameter) / 4;
-    const referenceTemperature = 293.15;
-    const z = this.compressibility(gasId, this.absolute(pressureHighRelative, 758) * 1000, referenceTemperature);
+    const temperatureKelvin = temperatureCelsius + 273.15;
+    const pressurePascal = pressureHighAbsolute * 1000;
+    const z = this.compressibility(gasId, pressurePascal, temperatureKelvin);
     const effectiveGasConstant = gas.specificGasConstant / Math.max(z, this.epsilon);
     const criticalRatio = this.criticalRatio(gas.adiabaticIndex);
 
@@ -75,13 +84,13 @@ export class Lab6Physics {
         Math.sqrt(
           ((2 * gas.adiabaticIndex) / (gas.adiabaticIndex - 1)) *
             effectiveGasConstant *
-            referenceTemperature *
+            temperatureKelvin *
             (1 - Math.pow(ratio, (gas.adiabaticIndex - 1) / gas.adiabaticIndex)),
         ) * area
       );
     }
 
-    return Math.sqrt(((2 * gas.adiabaticIndex) / (gas.adiabaticIndex - 1)) * effectiveGasConstant * referenceTemperature) * area;
+    return Math.sqrt(((2 * gas.adiabaticIndex) / (gas.adiabaticIndex + 1)) * effectiveGasConstant * temperatureKelvin) * area;
   }
 
   private velocity(volume: number, diameter: number): number {
