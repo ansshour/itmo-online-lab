@@ -1,49 +1,53 @@
-export type EquipmentKind =
-  | 'compressor'
-  | 'receiver'
-  | 'chamber'
-  | 'nozzle'
-  | 'valve'
-  | 'flowmeter';
+export enum EquipmentKind {
+  Compressor = 'compressor',
+  Receiver = 'receiver',
+  Chamber = 'chamber',
+  Nozzle = 'nozzle',
+  Valve = 'valve',
+  Flowmeter = 'flowmeter',
+}
 
-export type SensorKind = 'manometer' | 'temperatureSensor';
+export enum SensorKind {
+  Manometer = 'manometer',
+  TemperatureSensor = 'temperatureSensor',
+}
 
-export type PortDefinition = {
-  id: string;
-  tileX: number;
-  tileY: number;
-};
+export interface PortDefinition {
+  readonly id: string;
+  readonly tileX: number;
+  readonly tileY: number;
+}
 
-export type SensorSlotDefinition = {
-  id: string;
-  kind: SensorKind;
-  tileX: number;
-  tileY: number;
-};
+export interface SensorSlotDefinition {
+  readonly id: string;
+  readonly kind: SensorKind;
+  readonly tileX: number;
+  readonly tileY: number;
+}
 
-export type EquipmentDefinition = {
-  kind: EquipmentKind;
-  label: string;
-  maxCount: number;
-  tileWidth: number;
-  tileHeight: number;
-  ports: PortDefinition[];
-  sensorSlots: SensorSlotDefinition[];
-};
+export interface EquipmentDefinition {
+  readonly kind: EquipmentKind;
+  readonly label: string;
+  readonly maxCount: number;
+  readonly tileWidth: number;
+  readonly tileHeight: number;
+  readonly ports: readonly PortDefinition[];
+  readonly sensorSlots: readonly SensorSlotDefinition[];
+}
 
-export type SensorDefinition = {
-  kind: SensorKind;
-  label: string;
-  maxCount: number;
-};
+export interface SensorDefinition {
+  readonly kind: SensorKind;
+  readonly label: string;
+  readonly maxCount: number;
+}
 
-export type Lab6Config = {
-  gridTileSize: number;
-  planeOffsetX: number;
-  planeOffsetY: number;
-  workspaceTilesWidth: number;
-  workspaceTilesHeight: number;
-  equipment: Record<EquipmentKind, EquipmentDefinition>;
-  sensors: Record<SensorKind, SensorDefinition>;
-  chain: EquipmentKind[];
-};
+export interface Lab6Config {
+  readonly gridTileSize: number;
+  readonly planeOffsetX: number;
+  readonly planeOffsetY: number;
+  readonly workspaceTilesWidth: number;
+  readonly workspaceTilesHeight: number;
+  readonly equipment: Record<EquipmentKind, EquipmentDefinition>;
+  readonly sensors: Record<SensorKind, SensorDefinition>;
+  readonly chain: readonly EquipmentKind[];
+}

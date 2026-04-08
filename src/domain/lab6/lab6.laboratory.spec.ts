@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { createRunningLaboratory } from './lab6.laboratory.spec.utils';
-import { withMathRandomValues } from './lab6.physics.spec.utils';
+import { Lab6LaboratorySpecUtils } from './lab6.laboratory.spec.utils';
+import { Lab6PhysicsSpecUtils } from './lab6.physics.spec.utils';
 
 describe('Lab6Laboratory', () => {
   describe('#captureMeasurement', () => {
     describe('when the laboratory is running', () => {
       it('should convert flow to liters per minute and keep measured physics values', () => {
-        const laboratory = createRunningLaboratory();
+        const laboratory = Lab6LaboratorySpecUtils.createRunningLaboratory();
 
-        withMathRandomValues([0, 1, 0.5], () => laboratory.setValvePosition(5));
+        Lab6PhysicsSpecUtils.withMathRandomValues([0, 1, 0.5], () => laboratory.setValvePosition(5));
         const measurement = laboratory.snapshot().measurements;
         laboratory.captureMeasurement();
         const records = laboratory.snapshot().measurementRecords;
@@ -30,11 +30,11 @@ describe('Lab6Laboratory', () => {
 
     describe('when multiple measurements are captured', () => {
       it('should increment record index for each measurement', () => {
-        const laboratory = createRunningLaboratory();
+        const laboratory = Lab6LaboratorySpecUtils.createRunningLaboratory();
 
-        withMathRandomValues([0, 1, 0.5], () => laboratory.setValvePosition(4));
+        Lab6PhysicsSpecUtils.withMathRandomValues([0, 1, 0.5], () => laboratory.setValvePosition(4));
         laboratory.captureMeasurement();
-        withMathRandomValues([0.25, 0.75, 0.5], () => laboratory.setValvePosition(6));
+        Lab6PhysicsSpecUtils.withMathRandomValues([0.25, 0.75, 0.5], () => laboratory.setValvePosition(6));
         laboratory.captureMeasurement();
         const records = laboratory.snapshot().measurementRecords;
 

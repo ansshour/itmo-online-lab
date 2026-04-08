@@ -1,23 +1,31 @@
 import { LAB6_CONFIG } from '../../config/lab6/lab6.config';
-import type { EquipmentDefinition, EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
+import { LAB6_DEFAULT_GAS_ID } from '../../config/lab6/gases/lab6.gases.consts';
+import { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
+import type { EquipmentDefinition } from '../../config/lab6/lab6.types';
 import { Grid } from '../grid/grid';
 import type { GridPoint } from '../grid/grid.types';
-import { LAB6_NUMBERS, LAB6_STAGE_LABELS, LAB6_STATUS_LABELS } from './lab6-laboratory.consts';
-import { LAB6_DEFAULT_GAS_ID, LAB6_GASES, getLab6Gas } from './lab6-gases';
-import { Lab6Physics } from './lab6-physics';
-import { Lab6Validator } from './lab6-validator';
+import { LAB6_NUMBERS } from './lab6.laboratory.consts';
+import { Lab6Gases } from './gases/lab6.gases';
+import { Lab6Physics } from './lab6.physics';
+import { Lab6StageMachine } from './stageMachine/lab6.stageMachine';
+import { Lab6Validator } from './lab6.validator';
 import type {
-  ConnectionFailureReason,
   ConnectionPlacement,
   EquipmentPlacement,
   InteractionResult,
   LaboratorySnapshot,
-  LaboratoryStage,
   PaletteEntry,
-  SensorInstallFailureReason,
+  RouteState,
   ValidationResult,
-} from './lab6-laboratory.types';
-import type { Lab6MeasurementRecord, Lab6Measurements } from './lab6-measurements.types';
+} from './lab6.laboratory.types';
+import {
+  ConnectionFailureReason,
+  LaboratoryStage,
+  PaletteCategory,
+  RouteDirection,
+  SensorInstallFailureReason,
+} from './lab6.laboratory.types';
+import type { Lab6MeasurementRecord, Lab6Measurements } from './lab6.measurements.types';
 
 export class Lab6Laboratory {
   private readonly config = LAB6_CONFIG;
@@ -26,9 +34,11 @@ export class Lab6Laboratory {
 
   private readonly physics: Lab6Physics;
 
-  private readonly validator: Lab6Validator;
+  private readonly gases: Lab6Gases;
 
-  private stage: LaboratoryStage;
+  private readonly stageMachine: Lab6StageMachine;
+
+  private readonly validator: Lab6Validator;
 
   private items: EquipmentPlacement[];
 
@@ -39,8 +49,6 @@ export class Lab6Laboratory {
   private equipmentIdentifier: number;
 
   private connectionIdentifier: number;
-
-  private status: string;
 
   private variantIndex: number;
 
@@ -53,22 +61,22 @@ export class Lab6Laboratory {
   private measurementRecords: Lab6MeasurementRecord[];
 
   public constructor() {
-    this.grid = new Grid(
-      this.config.gridTileSize,
-      this.config.planeOffsetX,
-      this.config.planeOffsetY,
-      this.config.workspaceTilesWidth,
-      this.config.workspaceTilesHeight,
-    );
+    this.grid = new Grid({
+      tileSize: this.config.gridTileSize,
+      offsetX: this.config.planeOffsetX,
+      offsetY: this.config.planeOffsetY,
+      width: this.config.workspaceTilesWidth,
+      height: this.config.workspaceTilesHeight,
+    });
     this.physics = new Lab6Physics();
+    this.gases = new Lab6Gases();
+    this.stageMachine = new Lab6StageMachine();
     this.validator = new Lab6Validator(this.config);
-    this.stage = 'assembly';
     this.items = [];
     this.connections = [];
     this.measurements = null;
     this.equipmentIdentifier = LAB6_NUMBERS.firstIdentifier;
     this.connectionIdentifier = LAB6_NUMBERS.firstIdentifier;
-    this.status = LAB6_STATUS_LABELS.assembly;
     this.variantIndex = 0;
     this.valvePosition = LAB6_NUMBERS.closedValvePosition;
     this.startedAt = 0;
@@ -77,16 +85,18 @@ export class Lab6Laboratory {
   }
 
   public snapshot(): LaboratorySnapshot {
+    const stageSnapshot = this.stageMachine.snapshot();
+
     return {
-      stage: this.stage,
+      stage: stageSnapshot.stage,
       items: [...this.items],
       connections: [...this.connections],
       measurements: this.measurements,
       measurementRecords: [...this.measurementRecords],
       selectedGasId: this.selectedGasId,
-      gasOptions: LAB6_GASES.map((gas) => ({ id: gas.id, label: gas.label, model: gas.model })),
-      status: this.status,
-      primaryLabel: LAB6_STAGE_LABELS[this.stage],
+      gasOptions: this.gases.all().map((gas) => ({ id: gas.id, label: gas.label, model: gas.model })),
+      status: stageSnapshot.status,
+      primaryLabel: stageSnapshot.primaryLabel,
       palette: this.palette(),
     };
   }
@@ -96,7 +106,7 @@ export class Lab6Laboratory {
   }
 
   public stageValue(): LaboratoryStage {
-    return this.stage;
+    return this.stageMachine.stageValue();
   }
 
   public captureMeasurement(): void {
@@ -121,7 +131,7 @@ export class Lab6Laboratory {
   }
 
   public setGas(gasId: string): void {
-    const nextGas = getLab6Gas(gasId);
+    const nextGas = this.gases.get(gasId);
 
     if (nextGas.id === this.selectedGasId) {
       return;
@@ -140,19 +150,19 @@ export class Lab6Laboratory {
   }
 
   public canAdvance(): ValidationResult {
-    if (this.stage === 'assembly') {
-      return this.validator.assembly(this.items, this.connections);
+    if (this.stageMachine.isAssembly()) {
+      return this.stageMachine.canAdvance(this.validator.assembly(this.items, this.connections));
     }
 
-    if (this.stage === 'instruments') {
-      return this.validator.sensors(this.items);
+    if (this.stageMachine.isInstruments()) {
+      return this.stageMachine.canAdvance(this.validator.sensors(this.items));
     }
 
-    return { valid: true, message: LAB6_STATUS_LABELS.runningStopped };
+    return this.stageMachine.canAdvance();
   }
 
   public create(kind: EquipmentKind, point: GridPoint): boolean {
-    if (this.stage !== 'assembly') {
+    if (!this.stageMachine.isAssembly()) {
       return false;
     }
 
@@ -170,13 +180,13 @@ export class Lab6Laboratory {
     }
 
     this.items = [...this.items, placement];
-    this.status = LAB6_STATUS_LABELS.assembly;
+    this.stageMachine.restoreAssembly();
 
     return true;
   }
 
   public move(identifier: string, point: GridPoint): boolean {
-    if (this.stage !== 'assembly') {
+    if (!this.stageMachine.isAssembly()) {
       return false;
     }
 
@@ -212,7 +222,7 @@ export class Lab6Laboratory {
       (connection) => connection.from.equipmentId !== identifier && connection.to.equipmentId !== identifier,
     );
 
-    this.status = LAB6_STATUS_LABELS.assembly;
+    this.stageMachine.restoreAssembly();
   }
 
   public connect(
@@ -221,16 +231,16 @@ export class Lab6Laboratory {
     toEquipmentId: string,
     toPortId: string,
   ): InteractionResult<ConnectionFailureReason> {
-    if (this.stage !== 'assembly') {
-      return { ok: false, reason: 'stage' };
+    if (!this.stageMachine.isAssembly()) {
+      return { ok: false, reason: ConnectionFailureReason.Stage };
     }
 
     if (fromEquipmentId === toEquipmentId) {
-      return { ok: false, reason: 'self' };
+      return { ok: false, reason: ConnectionFailureReason.Self };
     }
 
     if (!this.connectionAllowed(fromEquipmentId, fromPortId, toEquipmentId, toPortId)) {
-      return { ok: false, reason: 'invalidTarget' };
+      return { ok: false, reason: ConnectionFailureReason.InvalidTarget };
     }
 
     const sameConnection = this.connections.some((connection) => {
@@ -249,11 +259,11 @@ export class Lab6Laboratory {
     });
 
     if (sameConnection) {
-      return { ok: false, reason: 'duplicate' };
+      return { ok: false, reason: ConnectionFailureReason.Duplicate };
     }
 
     if (this.portBusy(fromEquipmentId, fromPortId) || this.portBusy(toEquipmentId, toPortId)) {
-      return { ok: false, reason: 'portBusy' };
+      return { ok: false, reason: ConnectionFailureReason.PortBusy };
     }
 
     const connection: ConnectionPlacement = {
@@ -269,7 +279,7 @@ export class Lab6Laboratory {
     };
 
     if (connection.path.length < 2) {
-      return { ok: false, reason: 'invalidRoute' };
+      return { ok: false, reason: ConnectionFailureReason.InvalidRoute };
     }
 
     this.connectionIdentifier += 1;
@@ -296,12 +306,12 @@ export class Lab6Laboratory {
   }
 
   public install(kind: SensorKind, equipmentId: string, slotId: string): InteractionResult<SensorInstallFailureReason> {
-    if (this.stage !== 'instruments') {
-      return { ok: false, reason: 'stage' };
+    if (!this.stageMachine.isInstruments()) {
+      return { ok: false, reason: SensorInstallFailureReason.Stage };
     }
 
     if (this.remainingSensor(kind) <= 0) {
-      return { ok: false, reason: 'limit' };
+      return { ok: false, reason: SensorInstallFailureReason.Limit };
     }
 
     const equipment = this.items.find((item) => item.id === equipmentId);
@@ -309,17 +319,17 @@ export class Lab6Laboratory {
     const slot = definition?.sensorSlots.find((entry) => entry.id === slotId);
 
     if (!equipment || !slot) {
-      return { ok: false, reason: 'wrongPoint' };
+      return { ok: false, reason: SensorInstallFailureReason.WrongPoint };
     }
 
     if (slot.kind !== kind) {
-      return { ok: false, reason: 'wrongSensorType' };
+      return { ok: false, reason: SensorInstallFailureReason.WrongSensorType };
     }
 
     const occupied = equipment.sensors.some((sensor) => sensor.slotId === slotId);
 
     if (occupied) {
-      return { ok: false, reason: 'occupied' };
+      return { ok: false, reason: SensorInstallFailureReason.Occupied };
     }
 
     this.items = this.items.map((item) => {
@@ -333,58 +343,46 @@ export class Lab6Laboratory {
       };
     });
 
-    this.status = LAB6_STATUS_LABELS.instruments;
+    this.stageMachine.restoreInstruments();
 
     return { ok: true };
   }
 
   public advance(now: number): ValidationResult {
-    if (this.stage === 'assembly') {
+    if (this.stageMachine.isAssembly()) {
       const validation = this.validator.assembly(this.items, this.connections);
 
-      if (!validation.valid) {
-        this.status = validation.message;
-
-        return validation;
-      }
-
-      this.stage = 'instruments';
-      this.status = validation.message;
-
-      return validation;
+      return this.stageMachine.advance(validation);
     }
 
-    if (this.stage === 'instruments') {
+    if (this.stageMachine.isInstruments()) {
       const validation = this.validator.sensors(this.items);
 
-      if (!validation.valid) {
-        this.status = validation.message;
+      const result = this.stageMachine.advance(validation);
 
-        return validation;
+      if (!result.valid) {
+        return result;
       }
 
-      this.stage = 'running';
       this.variantIndex = this.physics.choose();
       this.valvePosition = LAB6_NUMBERS.closedValvePosition;
       this.startedAt = now;
       this.measurementRecords = [];
       this.measurements = this.physics.calculate(this.variantIndex, this.valvePosition, 0, this.selectedGasId);
-      this.status = validation.message;
 
-      return validation;
+      return result;
     }
 
-    this.stage = 'assembly';
+    const result = this.stageMachine.advance();
     this.measurements = null;
     this.measurementRecords = [];
     this.startedAt = 0;
-    this.status = LAB6_STATUS_LABELS.runningStopped;
 
-    return { valid: true, message: this.status };
+    return result;
   }
 
   public tick(now: number): void {
-    if (this.stage !== 'running' || !this.measurements) {
+    if (!this.stageMachine.isRunning() || !this.measurements) {
       return;
     }
 
@@ -398,7 +396,7 @@ export class Lab6Laboratory {
   }
 
   public valve(step: number): void {
-    if (this.stage !== 'running') {
+    if (!this.stageMachine.isRunning()) {
       return;
     }
 
@@ -420,7 +418,7 @@ export class Lab6Laboratory {
   }
 
   public setValvePosition(position: number): void {
-    if (this.stage !== 'running') {
+    if (!this.stageMachine.isRunning()) {
       return;
     }
 
@@ -532,23 +530,23 @@ export class Lab6Laboratory {
   }
 
   private palette(): PaletteEntry[] {
-    if (this.stage === 'assembly') {
+    if (this.stageMachine.isAssembly()) {
       return Object.values(this.config.equipment).map((definition) => ({
         kind: definition.kind,
         label: definition.label,
         remaining: this.remainingEquipment(definition.kind),
-        category: 'equipment',
+        category: PaletteCategory.Equipment,
       }));
     }
 
-    if (this.stage === 'instruments') {
+    if (this.stageMachine.isInstruments()) {
       return Object.values(this.config.sensors)
         .filter((definition) => definition.maxCount > 0)
         .map((definition) => ({
           kind: definition.kind,
           label: definition.label,
           remaining: this.remainingSensor(definition.kind),
-          category: 'sensor',
+          category: PaletteCategory.Sensor,
         }));
     }
 
@@ -768,20 +766,11 @@ export class Lab6Laboratory {
       return [from];
     }
 
-    type Direction = 'up' | 'right' | 'down' | 'left';
-    type RouteState = {
-      point: GridPoint;
-      direction: Direction | null;
-      cost: number;
-      score: number;
-      previous: string | null;
-    };
-
-    const directions: Array<{ direction: Direction; offset: GridPoint }> = [
-      { direction: 'right', offset: { tileX: 1, tileY: 0 } },
-      { direction: 'down', offset: { tileX: 0, tileY: 1 } },
-      { direction: 'left', offset: { tileX: -1, tileY: 0 } },
-      { direction: 'up', offset: { tileX: 0, tileY: -1 } },
+    const directions: Array<{ direction: RouteDirection; offset: GridPoint }> = [
+      { direction: RouteDirection.Right, offset: { tileX: 1, tileY: 0 } },
+      { direction: RouteDirection.Down, offset: { tileX: 0, tileY: 1 } },
+      { direction: RouteDirection.Left, offset: { tileX: -1, tileY: 0 } },
+      { direction: RouteDirection.Up, offset: { tileX: 0, tileY: -1 } },
     ];
     const open: string[] = [];
     const states = new Map<string, RouteState>();

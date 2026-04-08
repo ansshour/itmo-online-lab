@@ -1,6 +1,8 @@
+import { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
 import type { Lab6Config } from '../../config/lab6/lab6.types';
-import type { ConnectionPlacement, EquipmentPlacement, ValidationResult } from './lab6-laboratory.types';
-import { LAB6_NUMBERS, LAB6_STATUS_LABELS } from './lab6-laboratory.consts';
+import type { ConnectionPlacement, EquipmentPlacement, ValidationResult } from './lab6.laboratory.types';
+import { LAB6_NUMBERS } from './lab6.laboratory.consts';
+import { LAB6_STATUS_LABELS } from './stageMachine/lab6.stageMachine.consts';
 
 export class Lab6Validator {
   private readonly config: Lab6Config;
@@ -9,7 +11,7 @@ export class Lab6Validator {
     this.config = config;
   }
 
-  public assembly(items: EquipmentPlacement[], connections: ConnectionPlacement[]): ValidationResult {
+  public assembly(items: readonly EquipmentPlacement[], connections: readonly ConnectionPlacement[]): ValidationResult {
     const countsValid = this.counts(items);
 
     if (!countsValid) {
@@ -25,14 +27,14 @@ export class Lab6Validator {
     return { valid: true, message: LAB6_STATUS_LABELS.instruments };
   }
 
-  public sensors(items: EquipmentPlacement[]): ValidationResult {
-    const chambers = items.filter((item) => item.kind === 'chamber');
+  public sensors(items: readonly EquipmentPlacement[]): ValidationResult {
+    const chambers = items.filter((item) => item.kind === EquipmentKind.Chamber);
 
     if (chambers.length !== LAB6_NUMBERS.requiredSensorCountPerKind) {
       return { valid: false, message: LAB6_STATUS_LABELS.sensorError };
     }
 
-    const sensorsValid = chambers.every((item) => item.sensors.some((sensor) => sensor.kind === 'manometer'));
+    const sensorsValid = chambers.every((item) => item.sensors.some((sensor) => sensor.kind === SensorKind.Manometer));
 
     if (!sensorsValid) {
       return { valid: false, message: LAB6_STATUS_LABELS.sensorError };
@@ -41,7 +43,7 @@ export class Lab6Validator {
     return { valid: true, message: LAB6_STATUS_LABELS.running };
   }
 
-  private counts(items: EquipmentPlacement[]): boolean {
+  private counts(items: readonly EquipmentPlacement[]): boolean {
     return Object.values(this.config.equipment).every((definition) => {
       const count = items.filter((item) => item.kind === definition.kind).length;
 
@@ -49,7 +51,7 @@ export class Lab6Validator {
     });
   }
 
-  private graph(items: EquipmentPlacement[], connections: ConnectionPlacement[]): boolean {
+  private graph(items: readonly EquipmentPlacement[], connections: readonly ConnectionPlacement[]): boolean {
     const requiredCount = this.config.chain.length - 1;
     const nodeById = new Map(items.map((item) => [item.id, item]));
     const adjacency = new Map<string, Set<string>>();
@@ -88,7 +90,7 @@ export class Lab6Validator {
       return false;
     }
 
-    const compressor = items.find((item) => item.kind === 'compressor');
+    const compressor = items.find((item) => item.kind === EquipmentKind.Compressor);
 
     if (!compressor) {
       return false;
@@ -100,7 +102,7 @@ export class Lab6Validator {
       return false;
     }
 
-    const chainKinds = path.map((identifier) => nodeById.get(identifier)?.kind ?? 'compressor');
+    const chainKinds = path.map((identifier) => nodeById.get(identifier)?.kind ?? EquipmentKind.Compressor);
 
     return chainKinds.every((kind, index) => kind === this.config.chain[index]);
   }
@@ -129,7 +131,7 @@ export class Lab6Validator {
     return route;
   }
 
-  private implicitConnections(items: EquipmentPlacement[]): Array<{ fromEquipmentId: string; toEquipmentId: string }> {
+  private implicitConnections(items: readonly EquipmentPlacement[]): Array<{ fromEquipmentId: string; toEquipmentId: string }> {
     const connections: Array<{ fromEquipmentId: string; toEquipmentId: string }> = [];
 
     for (let leftIndex = 0; leftIndex < items.length; leftIndex += 1) {

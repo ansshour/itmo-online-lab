@@ -1,9 +1,16 @@
-import { LAB6_PARAMETERS, LAB6_SUBVARIANTS_COUNT } from '../../config/lab6/lab6-parameters.config';
-import { getLab6Gas } from './lab6-gases';
-import type { Lab6Measurements } from './lab6-measurements.types';
+import { LAB6_PARAMETERS, LAB6_SUBVARIANTS_COUNT } from '../../config/lab6/lab6.parameters.config';
+import { GasModelKind } from '../../config/lab6/gases/lab6.gases.types';
+import { Lab6Gases } from './gases/lab6.gases';
+import type { Lab6Measurements } from './lab6.measurements.types';
 
 export class Lab6Physics {
   private readonly epsilon = 1e-9;
+
+  private readonly gases: Lab6Gases;
+
+  public constructor() {
+    this.gases = new Lab6Gases();
+  }
 
   public choose(): number {
     return Math.floor(Math.random() * LAB6_PARAMETERS.length);
@@ -13,7 +20,7 @@ export class Lab6Physics {
     const variant = LAB6_PARAMETERS[variantIndex];
     const safePosition = Math.min(Math.max(valvePosition, 0), LAB6_SUBVARIANTS_COUNT - 1);
     const row = variant[safePosition] ?? variant[0];
-    const gas = getLab6Gas(gasId);
+    const gas = this.gases.get(gasId);
 
     const pressureHighAbsolute = this.absolute(row.p1, row.B);
     const pressureLowAbsolute = pressureHighAbsolute * row.b;
@@ -71,7 +78,7 @@ export class Lab6Physics {
     gasId: string,
     temperatureCelsius: number,
   ): number {
-    const gas = getLab6Gas(gasId);
+    const gas = this.gases.get(gasId);
     const area = (Math.PI * diameter * diameter) / 4;
     const temperatureKelvin = temperatureCelsius + 273.15;
     const pressurePascal = pressureHighAbsolute * 1000;
@@ -104,9 +111,9 @@ export class Lab6Physics {
   }
 
   private compressibility(gasId: string, pressurePascal: number, temperatureKelvin: number): number {
-    const gas = getLab6Gas(gasId);
+    const gas = this.gases.get(gasId);
 
-    if (gas.model === 'ideal') {
+    if (gas.model === GasModelKind.Ideal) {
       return 1;
     }
 

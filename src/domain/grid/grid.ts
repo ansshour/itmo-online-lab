@@ -1,4 +1,4 @@
-import type { GridArea, GridPoint, PixelPoint } from './grid.types';
+import type { GridArea, GridPoint, GridProps, PixelPoint } from './grid.types';
 
 export class Grid {
   private readonly tileSize: number;
@@ -11,12 +11,12 @@ export class Grid {
 
   private readonly height: number;
 
-  public constructor(tileSize: number, offsetX: number, offsetY: number, width: number, height: number) {
-    this.tileSize = tileSize;
-    this.offsetX = offsetX;
-    this.offsetY = offsetY;
-    this.width = width;
-    this.height = height;
+  public constructor(props: GridProps) {
+    this.tileSize = props.tileSize;
+    this.offsetX = props.offsetX;
+    this.offsetY = props.offsetY;
+    this.width = props.width;
+    this.height = props.height;
   }
 
   public snap(point: PixelPoint): GridPoint {

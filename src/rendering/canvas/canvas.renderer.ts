@@ -1,9 +1,10 @@
 import { LAB6_CONFIG } from '../../config/lab6/lab6.config';
-import type { SensorKind } from '../../config/lab6/lab6.types';
+import { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
 import { Grid } from '../../domain/grid/grid';
 import type { GridPoint, PixelPoint } from '../../domain/grid/grid.types';
-import type { EquipmentPlacement, PortReference } from '../../domain/lab6/lab6-laboratory.types';
-import type { RenderState } from './canvas-renderer.types';
+import { LaboratoryStage } from '../../domain/lab6/lab6.laboratory.types';
+import type { EquipmentPlacement, PortReference } from '../../domain/lab6/lab6.laboratory.types';
+import type { RenderState } from './canvas.renderer.types';
 
 export class CanvasRenderer {
   private readonly context: CanvasRenderingContext2D;
@@ -72,7 +73,7 @@ export class CanvasRenderer {
   }
 
   private connections(state: RenderState): void {
-    const running = state.snapshot.stage === 'running';
+    const running = state.snapshot.stage === LaboratoryStage.Running;
 
     for (const connection of state.snapshot.connections) {
       const flowPath = this.flowPath(connection.path, connection.from, connection.to, state.snapshot.items);
@@ -116,7 +117,7 @@ export class CanvasRenderer {
       this.sensors(item, state, false);
     }
 
-    if (state.snapshot.stage === 'running' && state.snapshot.measurements) {
+    if (state.snapshot.stage === LaboratoryStage.Running && state.snapshot.measurements) {
       for (const item of state.snapshot.items) {
         this.sensors(item, state, true);
       }
@@ -148,7 +149,7 @@ export class CanvasRenderer {
   }
 
   private previewSensor(state: RenderState): void {
-    if (!state.sensorPreview || state.snapshot.stage !== 'instruments') {
+    if (!state.sensorPreview || state.snapshot.stage !== LaboratoryStage.Instruments) {
       return;
     }
 
@@ -170,7 +171,7 @@ export class CanvasRenderer {
     const tileSize = this.grid.getTileSize();
     const width = item.tileWidth * tileSize;
     const height = item.tileHeight * tileSize;
-    const running = state.snapshot.stage === 'running';
+    const running = state.snapshot.stage === LaboratoryStage.Running;
     const measurements = state.snapshot.measurements;
     const time = this.animationTime();
     const active = running;
@@ -193,22 +194,22 @@ export class CanvasRenderer {
     }
 
     switch (item.kind) {
-      case 'compressor':
+      case EquipmentKind.Compressor:
         this.drawCompressor(point.x, point.y, width, height, running, time);
         break;
-      case 'receiver':
+      case EquipmentKind.Receiver:
         this.drawReceiver(point.x, point.y, width, height, running, time);
         break;
-      case 'chamber':
+      case EquipmentKind.Chamber:
         this.drawChamber(point.x, point.y, width, height, accentColor, running, time, item.ordinal, measurements);
         break;
-      case 'nozzle':
+      case EquipmentKind.Nozzle:
         this.drawNozzle(point.x, point.y, width, height, accentColor, running, time);
         break;
-      case 'valve':
+      case EquipmentKind.Valve:
         this.drawValve(point.x, point.y, width, height, running, time, measurements?.valvePosition ?? 0);
         break;
-      case 'flowmeter':
+      case EquipmentKind.Flowmeter:
         this.drawFlowmeter(point.x, point.y, width, height, running, time, measurements?.volume ?? 0);
         break;
       default:
@@ -808,8 +809,8 @@ export class CanvasRenderer {
   }
 
   private ports(
-    items: EquipmentPlacement[],
-    visibleEquipmentIds: string[],
+    items: readonly EquipmentPlacement[],
+    visibleEquipmentIds: readonly string[],
     hoveredPort: PortReference | null,
     connectionSource: PortReference | null,
   ): void {
@@ -869,15 +870,15 @@ export class CanvasRenderer {
 
   private sensors(item: EquipmentPlacement, state: RenderState, renderValues: boolean): void {
     const definition = LAB6_CONFIG.equipment[item.kind];
-    const running = state.snapshot.stage === 'running';
+    const running = state.snapshot.stage === LaboratoryStage.Running;
 
     for (const slot of definition.sensorSlots) {
       const point = this.grid.point({ tileX: item.tileX + slot.tileX, tileY: item.tileY + slot.tileY });
       const installed = item.sensors.find((sensor) => sensor.slotId === slot.id);
       const measurementValue = state.snapshot.measurements ? this.sensorValue(item, slot.kind, state.snapshot.measurements) : null;
 
-      if (state.snapshot.stage === 'instruments' && !installed) {
-        this.context.strokeStyle = slot.kind === 'manometer' ? '#2f7ed8' : '#d88608';
+      if (state.snapshot.stage === LaboratoryStage.Instruments && !installed) {
+        this.context.strokeStyle = slot.kind === SensorKind.Manometer ? '#2f7ed8' : '#d88608';
         this.context.lineWidth = 1.5;
         this.context.beginPath();
         this.context.arc(point.x, point.y, 7, 0, Math.PI * 2);
@@ -888,7 +889,7 @@ export class CanvasRenderer {
         continue;
       }
 
-      if (installed.kind === 'manometer') {
+      if (installed.kind === SensorKind.Manometer) {
         this.gauge(point, measurementValue, running);
       }
 
@@ -897,7 +898,7 @@ export class CanvasRenderer {
       }
     }
 
-    if (renderValues && state.snapshot.measurements && item.kind === 'flowmeter') {
+    if (renderValues && state.snapshot.measurements && item.kind === EquipmentKind.Flowmeter) {
       const point = this.grid.point({ tileX: item.tileX + Math.floor(item.tileWidth / 2), tileY: item.tileY });
       const litersPerMinute = state.snapshot.measurements.volume * 1000 * 60;
       const value = `${litersPerMinute.toFixed(2)} л/м`;
@@ -1047,7 +1048,7 @@ export class CanvasRenderer {
   }
 
 
-  private pipe(path: GridPoint[], flowing: boolean, flowPath: GridPoint[] = path, selected = false): void {
+  private pipe(path: readonly GridPoint[], flowing: boolean, flowPath: readonly GridPoint[] = path, selected = false): void {
     if (path.length < 2) {
       return;
     }
@@ -1091,11 +1092,11 @@ export class CanvasRenderer {
   }
 
   private flowPath(
-    path: GridPoint[],
+    path: readonly GridPoint[],
     from: { equipmentId: string; portId: string },
     to: { equipmentId: string; portId: string },
-    items: EquipmentPlacement[],
-  ): GridPoint[] {
+    items: readonly EquipmentPlacement[],
+  ): readonly GridPoint[] {
     const fromDirection = this.portDirection(from.portId);
     const toDirection = this.portDirection(to.portId);
 
@@ -1131,17 +1132,17 @@ export class CanvasRenderer {
 
   private flowRank(item: EquipmentPlacement): number {
     switch (item.kind) {
-      case 'compressor':
+      case EquipmentKind.Compressor:
         return 0;
-      case 'receiver':
+      case EquipmentKind.Receiver:
         return 1;
-      case 'chamber':
+      case EquipmentKind.Chamber:
         return item.ordinal === 1 ? 2 : 4;
-      case 'nozzle':
+      case EquipmentKind.Nozzle:
         return 3;
-      case 'valve':
+      case EquipmentKind.Valve:
         return 5;
-      case 'flowmeter':
+      case EquipmentKind.Flowmeter:
         return 6;
       default:
         return 99;
@@ -1206,7 +1207,7 @@ export class CanvasRenderer {
     }
   }
 
-  private pathPixels(path: GridPoint[]): PixelPoint[] {
+  private pathPixels(path: readonly GridPoint[]): PixelPoint[] {
     return path.map((point) => this.grid.point(point));
   }
 

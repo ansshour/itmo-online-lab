@@ -1,3 +1,4 @@
+import { EquipmentKind, SensorKind } from './lab6.types';
 import type { Lab6Config } from './lab6.types';
 
 export const LAB6_CONFIG: Lab6Config = {
@@ -6,10 +7,18 @@ export const LAB6_CONFIG: Lab6Config = {
   planeOffsetY: 16,
   workspaceTilesWidth: 40,
   workspaceTilesHeight: 28,
-  chain: ['compressor', 'receiver', 'chamber', 'nozzle', 'chamber', 'valve', 'flowmeter'],
+  chain: [
+    EquipmentKind.Compressor,
+    EquipmentKind.Receiver,
+    EquipmentKind.Chamber,
+    EquipmentKind.Nozzle,
+    EquipmentKind.Chamber,
+    EquipmentKind.Valve,
+    EquipmentKind.Flowmeter,
+  ],
   equipment: {
     compressor: {
-      kind: 'compressor',
+      kind: EquipmentKind.Compressor,
       label: 'Компрессор',
       maxCount: 1,
       tileWidth: 5,
@@ -18,7 +27,7 @@ export const LAB6_CONFIG: Lab6Config = {
       sensorSlots: [],
     },
     receiver: {
-      kind: 'receiver',
+      kind: EquipmentKind.Receiver,
       label: 'Ресивер',
       maxCount: 1,
       tileWidth: 8,
@@ -30,7 +39,7 @@ export const LAB6_CONFIG: Lab6Config = {
       sensorSlots: [],
     },
     chamber: {
-      kind: 'chamber',
+      kind: EquipmentKind.Chamber,
       label: 'Камера',
       maxCount: 2,
       tileWidth: 4,
@@ -39,10 +48,10 @@ export const LAB6_CONFIG: Lab6Config = {
         { id: 'in', tileX: 0, tileY: 3 },
         { id: 'out', tileX: 4, tileY: 3 },
       ],
-      sensorSlots: [{ id: 'manometer', kind: 'manometer', tileX: 4, tileY: 1 }],
+      sensorSlots: [{ id: 'manometer', kind: SensorKind.Manometer, tileX: 4, tileY: 1 }],
     },
     nozzle: {
-      kind: 'nozzle',
+      kind: EquipmentKind.Nozzle,
       label: 'Сопло',
       maxCount: 1,
       tileWidth: 3,
@@ -54,7 +63,7 @@ export const LAB6_CONFIG: Lab6Config = {
       sensorSlots: [],
     },
     valve: {
-      kind: 'valve',
+      kind: EquipmentKind.Valve,
       label: 'Вентиль',
       maxCount: 1,
       tileWidth: 3,
@@ -66,7 +75,7 @@ export const LAB6_CONFIG: Lab6Config = {
       sensorSlots: [],
     },
     flowmeter: {
-      kind: 'flowmeter',
+      kind: EquipmentKind.Flowmeter,
       label: 'Расходомер',
       maxCount: 1,
       tileWidth: 4,
@@ -77,12 +86,12 @@ export const LAB6_CONFIG: Lab6Config = {
   },
   sensors: {
     manometer: {
-      kind: 'manometer',
+      kind: SensorKind.Manometer,
       label: 'Манометр',
       maxCount: 2,
     },
     temperatureSensor: {
-      kind: 'temperatureSensor',
+      kind: SensorKind.TemperatureSensor,
       label: 'Термодатчик',
       maxCount: 0,
     },

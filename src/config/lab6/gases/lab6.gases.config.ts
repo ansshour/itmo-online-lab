@@ -1,30 +1,13 @@
-const UNIVERSAL_GAS_CONSTANT = 8.314462618;
+import { LAB6_UNIVERSAL_GAS_CONSTANT } from './lab6.gases.consts';
+import { GasModelKind } from './lab6.gases.types';
+import type { Lab6GasDefinition } from './lab6.gases.types';
 
-export type GasModelKind = 'ideal' | 'real';
-
-export type Lab6GasDefinition = {
-  id: string;
-  label: string;
-  model: GasModelKind;
-  molarMass: number;
-  adiabaticIndex: number;
-  criticalTemperature: number;
-  criticalPressure: number;
-  acentricFactor: number;
-};
-
-export type Lab6Gas = Lab6GasDefinition & {
-  specificGasConstant: number;
-};
-
-const createSpecificGasConstant = (molarMass: number): number => UNIVERSAL_GAS_CONSTANT / molarMass;
-
-export const LAB6_GASES: Lab6Gas[] = [
+export const LAB6_GAS_DEFINITIONS: readonly Lab6GasDefinition[] = [
   {
     id: 'ideal-gas',
     label: 'Идеальный газ',
-    model: 'ideal',
-    molarMass: UNIVERSAL_GAS_CONSTANT / 280.5,
+    model: GasModelKind.Ideal,
+    molarMass: LAB6_UNIVERSAL_GAS_CONSTANT / 280.5,
     adiabaticIndex: 1.4,
     criticalTemperature: 132.45,
     criticalPressure: 3_770_000,
@@ -33,7 +16,7 @@ export const LAB6_GASES: Lab6Gas[] = [
   {
     id: 'air',
     label: 'Воздух',
-    model: 'real',
+    model: GasModelKind.Real,
     molarMass: 0.0289652,
     adiabaticIndex: 1.4,
     criticalTemperature: 132.45,
@@ -43,7 +26,7 @@ export const LAB6_GASES: Lab6Gas[] = [
   {
     id: 'nitrogen',
     label: 'Азот',
-    model: 'real',
+    model: GasModelKind.Real,
     molarMass: 0.0280134,
     adiabaticIndex: 1.4,
     criticalTemperature: 126.2,
@@ -53,7 +36,7 @@ export const LAB6_GASES: Lab6Gas[] = [
   {
     id: 'oxygen',
     label: 'Кислород',
-    model: 'real',
+    model: GasModelKind.Real,
     molarMass: 0.031998,
     adiabaticIndex: 1.395,
     criticalTemperature: 154.58,
@@ -63,7 +46,7 @@ export const LAB6_GASES: Lab6Gas[] = [
   {
     id: 'carbon-dioxide',
     label: 'Углекислый газ',
-    model: 'real',
+    model: GasModelKind.Real,
     molarMass: 0.0440095,
     adiabaticIndex: 1.289,
     criticalTemperature: 304.13,
@@ -73,7 +56,7 @@ export const LAB6_GASES: Lab6Gas[] = [
   {
     id: 'methane',
     label: 'Метан',
-    model: 'real',
+    model: GasModelKind.Real,
     molarMass: 0.0160425,
     adiabaticIndex: 1.31,
     criticalTemperature: 190.56,
@@ -83,7 +66,7 @@ export const LAB6_GASES: Lab6Gas[] = [
   {
     id: 'helium',
     label: 'Гелий',
-    model: 'real',
+    model: GasModelKind.Real,
     molarMass: 0.0040026,
     adiabaticIndex: 1.66,
     criticalTemperature: 5.19,
@@ -93,19 +76,11 @@ export const LAB6_GASES: Lab6Gas[] = [
   {
     id: 'argon',
     label: 'Аргон',
-    model: 'real',
+    model: GasModelKind.Real,
     molarMass: 0.039948,
     adiabaticIndex: 1.667,
     criticalTemperature: 150.69,
     criticalPressure: 4_863_000,
     acentricFactor: -0.00219,
   },
-].map((gas) => ({
-  ...gas,
-  specificGasConstant: createSpecificGasConstant(gas.molarMass),
-})) as Lab6Gas[];
-
-export const LAB6_DEFAULT_GAS_ID = 'ideal-gas';
-
-export const getLab6Gas = (gasId: string): Lab6Gas =>
-  LAB6_GASES.find((gas) => gas.id === gasId) ?? LAB6_GASES[0];
+];

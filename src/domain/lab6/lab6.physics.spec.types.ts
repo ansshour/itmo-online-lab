@@ -1,4 +1,4 @@
-import type { Lab6Measurements } from './lab6-measurements.types';
+import type { Lab6Measurements } from './lab6.measurements.types';
 
 export interface Lab6PhysicsExpectedMeasurementProps {
   readonly variantIndex: number;

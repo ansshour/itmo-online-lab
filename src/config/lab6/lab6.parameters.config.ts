@@ -1,4 +1,4 @@
-import type { Lab6ParameterRow } from './lab6-parameters.types';
+import type { Lab6ParameterRow } from './lab6.parameters.types';
 
 export const LAB6_SUBVARIANTS_COUNT = 11;
 

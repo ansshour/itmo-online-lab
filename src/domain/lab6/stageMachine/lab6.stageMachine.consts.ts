@@ -12,12 +12,3 @@ export const LAB6_STATUS_LABELS = {
   sensorError: 'Для запуска нужны два манометра на камерах.',
   runningStopped: 'Работа остановлена. Можно снова собрать схему или скорректировать конфигурацию.',
 } as const;
-
-export const LAB6_NUMBERS = {
-  firstIdentifier: 1,
-  closedValvePosition: 0,
-  openedValvePosition: 10,
-  graphEndDegree: 1,
-  graphMiddleDegree: 2,
-  requiredSensorCountPerKind: 2,
-} as const;

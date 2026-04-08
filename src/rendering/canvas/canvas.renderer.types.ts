@@ -1,23 +1,23 @@
 import type { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
-import type { EquipmentPlacement, LaboratorySnapshot, PortReference } from '../../domain/lab6/lab6-laboratory.types';
+import type { EquipmentPlacement, LaboratorySnapshot, PortReference } from '../../domain/lab6/lab6.laboratory.types';
 import type { GridPoint } from '../../domain/grid/grid.types';
 
-export type PlacementPreview = {
+export interface PlacementPreview {
   kind: EquipmentKind;
   point: GridPoint;
   valid: boolean;
-};
+}
 
-export type SensorPreview = {
+export interface SensorPreview {
   kind: SensorKind;
   point: GridPoint;
-};
+}
 
-export type ConnectionPreview = {
+export interface ConnectionPreview {
   path: GridPoint[];
-};
+}
 
-export type RenderState = {
+export interface RenderState {
   snapshot: LaboratorySnapshot;
   placementPreview: PlacementPreview | null;
   sensorPreview: SensorPreview | null;
@@ -28,4 +28,4 @@ export type RenderState = {
   hoveredPort: PortReference | null;
   connectionSource: PortReference | null;
   visiblePortEquipmentIds: string[];
-};
+}

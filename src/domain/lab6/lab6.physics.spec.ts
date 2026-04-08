@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { LAB6_SUBVARIANTS_COUNT } from '../../config/lab6/lab6-parameters.config';
-import { LAB6_GASES } from './lab6-gases';
-import { Lab6Physics } from './lab6-physics';
-import {
-  calculationCases,
-  createExpectedMeasurement,
-  createStableRandomValues,
-  withMathRandomValues,
-} from './lab6.physics.spec.utils';
+import { LAB6_SUBVARIANTS_COUNT } from '../../config/lab6/lab6.parameters.config';
+import { Lab6Gases } from './gases/lab6.gases';
+import { Lab6Physics } from './lab6.physics';
+import { Lab6PhysicsSpecUtils } from './lab6.physics.spec.utils';
+
+const lab6Gases = new Lab6Gases();
 
 describe(Lab6Physics.name, () => {
   describe('#choose', () => {
@@ -16,7 +13,7 @@ describe(Lab6Physics.name, () => {
       it('should return the first variant index', () => {
         const physics = new Lab6Physics();
 
-        const result = withMathRandomValues([0], () => physics.choose());
+        const result = Lab6PhysicsSpecUtils.withMathRandomValues([0], () => physics.choose());
 
         expect(result).toBe(0);
       });
@@ -26,7 +23,7 @@ describe(Lab6Physics.name, () => {
       it('should return the last variant index', () => {
         const physics = new Lab6Physics();
 
-        const result = withMathRandomValues([0.999999999], () => physics.choose());
+        const result = Lab6PhysicsSpecUtils.withMathRandomValues([0.999999999], () => physics.choose());
 
         expect(result).toBe(1);
       });
@@ -35,12 +32,12 @@ describe(Lab6Physics.name, () => {
 
   describe('#calculate', () => {
     describe('when deterministic random values are used for every parameter row', () => {
-      it.each(calculationCases)(
+      it.each(Lab6PhysicsSpecUtils.calculationCases)(
         'should calculate expected measurements for variant $variantIndex valve $valvePosition',
         ({ variantIndex, valvePosition }) => {
           const physics = new Lab6Physics();
-          const randomValues = createStableRandomValues(valvePosition);
-          const expected = createExpectedMeasurement({
+          const randomValues = Lab6PhysicsSpecUtils.createStableRandomValues(valvePosition);
+          const expected = Lab6PhysicsSpecUtils.createExpectedMeasurement({
             variantIndex,
             valvePosition,
             stopwatchSeconds: 17,
@@ -48,7 +45,7 @@ describe(Lab6Physics.name, () => {
             randomValues,
           });
 
-          const result = withMathRandomValues(randomValues, () =>
+          const result = Lab6PhysicsSpecUtils.withMathRandomValues(randomValues, () =>
             physics.calculate(variantIndex, valvePosition, 17, 'ideal-gas'),
           );
 
@@ -75,7 +72,7 @@ describe(Lab6Physics.name, () => {
     describe('when valve position is outside the allowed range', () => {
       it('should clamp to the first subvariant', () => {
         const physics = new Lab6Physics();
-        const expected = createExpectedMeasurement({
+        const expected = Lab6PhysicsSpecUtils.createExpectedMeasurement({
           variantIndex: 0,
           valvePosition: 0,
           stopwatchSeconds: 9,
@@ -83,7 +80,7 @@ describe(Lab6Physics.name, () => {
           randomValues: [0],
         });
 
-        const result = withMathRandomValues([0], () => physics.calculate(0, -100, 9, 'ideal-gas'));
+        const result = Lab6PhysicsSpecUtils.withMathRandomValues([0], () => physics.calculate(0, -100, 9, 'ideal-gas'));
 
         expect(result.valvePosition).toBe(0);
         expect(result.volume).toBe(expected.volume);
@@ -93,7 +90,7 @@ describe(Lab6Physics.name, () => {
 
       it('should clamp to the last subvariant', () => {
         const physics = new Lab6Physics();
-        const expected = createExpectedMeasurement({
+        const expected = Lab6PhysicsSpecUtils.createExpectedMeasurement({
           variantIndex: 1,
           valvePosition: LAB6_SUBVARIANTS_COUNT - 1,
           stopwatchSeconds: 11,
@@ -101,7 +98,7 @@ describe(Lab6Physics.name, () => {
           randomValues: [0, 1, 0.5],
         });
 
-        const result = withMathRandomValues([0, 1, 0.5], () =>
+        const result = Lab6PhysicsSpecUtils.withMathRandomValues([0, 1, 0.5], () =>
           physics.calculate(1, 100, 11, 'ideal-gas'),
         );
 
@@ -116,7 +113,7 @@ describe(Lab6Physics.name, () => {
       it('should apply configured deviations to pressure and volume', () => {
         const physics = new Lab6Physics();
         const randomValues = [0.25, 0.5, 0.75];
-        const expected = createExpectedMeasurement({
+        const expected = Lab6PhysicsSpecUtils.createExpectedMeasurement({
           variantIndex: 0,
           valvePosition: 3,
           stopwatchSeconds: 21,
@@ -124,7 +121,7 @@ describe(Lab6Physics.name, () => {
           randomValues,
         });
 
-        const result = withMathRandomValues(randomValues, () =>
+        const result = Lab6PhysicsSpecUtils.withMathRandomValues(randomValues, () =>
           physics.calculate(0, 3, 21, 'ideal-gas'),
         );
 
@@ -136,10 +133,10 @@ describe(Lab6Physics.name, () => {
     });
 
     describe('when each gas model is used', () => {
-      it.each(LAB6_GASES)('should calculate stable measurements for $id', (gas) => {
+      it.each(lab6Gases.all())('should calculate stable measurements for $id', (gas) => {
         const physics = new Lab6Physics();
         const randomValues = [0, 1, 0.5];
-        const expected = createExpectedMeasurement({
+        const expected = Lab6PhysicsSpecUtils.createExpectedMeasurement({
           variantIndex: 0,
           valvePosition: 5,
           stopwatchSeconds: 13,
@@ -147,7 +144,7 @@ describe(Lab6Physics.name, () => {
           randomValues,
         });
 
-        const result = withMathRandomValues(randomValues, () =>
+        const result = Lab6PhysicsSpecUtils.withMathRandomValues(randomValues, () =>
           physics.calculate(0, 5, 13, gas.id),
         );
 

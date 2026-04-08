@@ -1,4 +1,6 @@
-export type Lab6Measurements = {
+import type { GasModelKind } from '../../config/lab6/gases/lab6.gases.types';
+
+export interface Lab6Measurements {
   barometer: number;
   pressureHigh: number;
   pressureLow: number;
@@ -11,20 +13,20 @@ export type Lab6Measurements = {
   volume: number;
   gasId: string;
   gasLabel: string;
-  gasModel: 'ideal' | 'real';
+  gasModel: GasModelKind;
   valvePosition: number;
   stopwatchSeconds: number;
   updatedAtSeconds: number;
-};
+}
 
-export type Lab6MeasurementRecord = {
+export interface Lab6MeasurementRecord {
   index: number;
   gasId: string;
   gasLabel: string;
-  gasModel: 'ideal' | 'real';
+  gasModel: GasModelKind;
   pressureHighBar: number;
   pressureLowBar: number;
   flowLitersPerMinute: number;
   pressureRatio: number;
   velocity: number;
-};
+}

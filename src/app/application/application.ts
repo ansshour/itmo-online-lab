@@ -1,28 +1,27 @@
 import { APPLICATION_CLASS_NAMES, APPLICATION_LABELS, APPLICATION_TEXTS } from './application.consts';
+import { ApplicationResults } from './application.results';
+import { ToastKind } from './application.types';
 import type {
   ApplicationElements,
   ConnectionSession,
   PaletteDragSession,
+  ToastMessage,
   ValveDragSession,
   WorkspaceDragSession,
 } from './application.types';
 import { LAB6_CONFIG } from '../../config/lab6/lab6.config';
-import type { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
+import { GasModelKind } from '../../config/lab6/gases/lab6.gases.types';
+import { EquipmentKind, SensorKind } from '../../config/lab6/lab6.types';
 import type { GridPoint, PixelPoint } from '../../domain/grid/grid.types';
-import { LAB6_GASES } from '../../domain/lab6/lab6-gases';
-import { Lab6Laboratory } from '../../domain/lab6/lab6-laboratory';
-import type { ConnectionFailureReason, SensorInstallFailureReason } from '../../domain/lab6/lab6-laboratory.types';
-import { CanvasRenderer } from '../../rendering/canvas/canvas-renderer';
-import type { ConnectionPreview, PlacementPreview, SensorPreview } from '../../rendering/canvas/canvas-renderer.types';
-
-type ToastKind = 'success' | 'error';
-
-type ToastMessage = {
-  id: number;
-  kind: ToastKind;
-  message: string;
-  expiresAt: number;
-};
+import { Lab6Laboratory } from '../../domain/lab6/lab6.laboratory';
+import {
+  ConnectionFailureReason,
+  LaboratoryStage,
+  PaletteCategory,
+  SensorInstallFailureReason,
+} from '../../domain/lab6/lab6.laboratory.types';
+import { CanvasRenderer } from '../../rendering/canvas/canvas.renderer';
+import type { ConnectionPreview, PlacementPreview, SensorPreview } from '../../rendering/canvas/canvas.renderer.types';
 
 export class Application {
   private readonly rootElement: HTMLDivElement;
@@ -30,6 +29,8 @@ export class Application {
   private readonly laboratory: Lab6Laboratory;
 
   private readonly renderer: CanvasRenderer;
+
+  private readonly results: ApplicationResults;
 
   private readonly elements: ApplicationElements;
 
@@ -67,11 +68,12 @@ export class Application {
 
   public constructor(rootElement: HTMLDivElement) {
     this.rootElement = rootElement;
-    this.rootElement.innerHTML = this.template();
-    this.rootElement.className = APPLICATION_CLASS_NAMES.root;
     this.laboratory = new Lab6Laboratory();
+    this.rootElement.innerHTML = this.template(this.laboratory.snapshot());
+    this.rootElement.className = APPLICATION_CLASS_NAMES.root;
     this.elements = this.resolve();
     this.renderer = new CanvasRenderer(this.elements.canvas, this.laboratory.getGrid());
+    this.results = new ApplicationResults();
     this.paletteDrag = null;
     this.workspaceDrag = null;
     this.valveDrag = null;
@@ -111,7 +113,7 @@ export class Application {
       const validation = this.laboratory.advance(performance.now());
 
       if (validation.valid) {
-        this.notify(this.successToast(stage), 'success');
+        this.notify(this.successToast(stage), ToastKind.Success);
       }
 
       this.refresh();
@@ -158,7 +160,7 @@ export class Application {
       const point = this.gridPoint(event);
       const stage = this.laboratory.stageValue();
 
-      if (stage === 'assembly') {
+      if (stage === LaboratoryStage.Assembly) {
         const port = this.portAtEvent(event);
 
         if (port) {
@@ -207,10 +209,10 @@ export class Application {
         }
       }
 
-      if (stage === 'running') {
+      if (stage === LaboratoryStage.Running) {
         const item = this.laboratory.item(point);
 
-        if (item?.kind === 'valve') {
+        if (item?.kind === EquipmentKind.Valve) {
           const currentPosition = this.laboratory.snapshot().measurements?.valvePosition ?? 0;
           const nextPosition = (currentPosition + 1) % 11;
 
@@ -234,7 +236,7 @@ export class Application {
 
       const point = this.gridPoint(event);
       const hovered = this.laboratory.item(point);
-      const hoveredPort = this.laboratory.stageValue() === 'assembly' ? this.portAtEvent(event) : null;
+      const hoveredPort = this.laboratory.stageValue() === LaboratoryStage.Assembly ? this.portAtEvent(event) : null;
 
       this.hoveredPort = hoveredPort;
       this.hoveredItemId = hovered?.id ?? hoveredPort?.equipmentId ?? '';
@@ -294,11 +296,11 @@ export class Application {
         this.laboratory.move(this.workspaceDrag.equipmentId, target);
       }
 
-      if (stage === 'assembly' && this.connection) {
+      if (stage === LaboratoryStage.Assembly && this.connection) {
         const targetPort = this.portAtEvent(event);
 
         if (!targetPort) {
-          this.notify(APPLICATION_LABELS.connectionInvalidError, 'error');
+          this.notify(APPLICATION_LABELS.connectionInvalidError, ToastKind.Error);
         } else {
           const result = this.laboratory.connect(
             this.connection.equipmentId,
@@ -308,7 +310,7 @@ export class Application {
           );
 
           if (!result.ok) {
-            this.notify(this.connectionToast(result.reason), 'error');
+            this.notify(this.connectionToast(result.reason), ToastKind.Error);
           }
         }
       }
@@ -319,7 +321,7 @@ export class Application {
       this.sensorPreview = null;
       this.connectionPreview = null;
       this.clearSelection();
-      this.hoveredPort = stage === 'assembly' ? this.portAtEvent(event) : null;
+      this.hoveredPort = stage === LaboratoryStage.Assembly ? this.portAtEvent(event) : null;
       this.refresh();
     });
 
@@ -356,7 +358,7 @@ export class Application {
     });
 
     window.addEventListener('keydown', (event) => {
-      if (!this.isDeleteShortcut(event) || this.laboratory.stageValue() !== 'assembly') {
+      if (!this.isDeleteShortcut(event) || this.laboratory.stageValue() !== LaboratoryStage.Assembly) {
         return;
       }
 
@@ -393,11 +395,11 @@ export class Application {
         return;
       }
 
-      if (this.paletteDrag?.category === 'equipment') {
+      if (this.paletteDrag?.category === PaletteCategory.Equipment) {
         this.dropEquipment(event);
       }
 
-      if (this.paletteDrag?.category === 'sensor') {
+      if (this.paletteDrag?.category === PaletteCategory.Sensor) {
         this.dropSensor(event);
       }
 
@@ -421,7 +423,7 @@ export class Application {
 
   private refresh(): void {
     const snapshot = this.laboratory.snapshot();
-    const running = snapshot.stage === 'running';
+    const running = snapshot.stage === LaboratoryStage.Running;
     const canAdvance = this.laboratory.canAdvance();
 
     this.elements.sidebarHeader.textContent = this.sidebarTitle(snapshot.stage);
@@ -458,7 +460,7 @@ export class Application {
   }
 
   private palette(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
-    if (snapshot.stage === 'running') {
+    if (snapshot.stage === LaboratoryStage.Running) {
       this.elements.sidebarList.innerHTML = '';
 
       return;
@@ -511,7 +513,7 @@ export class Application {
       return;
     }
 
-    if (this.paletteDrag.category === 'equipment') {
+    if (this.paletteDrag.category === PaletteCategory.Equipment) {
       const kind = this.paletteDrag.kind as EquipmentKind;
 
       this.placementPreview = {
@@ -521,7 +523,7 @@ export class Application {
       };
     }
 
-    if (this.paletteDrag.category === 'sensor') {
+    if (this.paletteDrag.category === PaletteCategory.Sensor) {
       this.sensorPreview = {
         kind: this.paletteDrag.kind as SensorKind,
         point,
@@ -532,7 +534,7 @@ export class Application {
   private dropEquipment(event: PointerEvent): void {
     const point = this.canvasPoint(event);
 
-    if (!point || !this.paletteDrag || this.paletteDrag.category !== 'equipment') {
+    if (!point || !this.paletteDrag || this.paletteDrag.category !== PaletteCategory.Equipment) {
       return;
     }
 
@@ -542,14 +544,14 @@ export class Application {
   private dropSensor(event: PointerEvent): void {
     const point = this.canvasPoint(event);
 
-    if (!point || !this.paletteDrag || this.paletteDrag.category !== 'sensor') {
+    if (!point || !this.paletteDrag || this.paletteDrag.category !== PaletteCategory.Sensor) {
       return;
     }
 
     const slot = this.laboratory.sensor(point);
 
     if (!slot) {
-      this.notify(APPLICATION_LABELS.sensorWrongPointError, 'error');
+      this.notify(APPLICATION_LABELS.sensorWrongPointError, ToastKind.Error);
 
       return;
     }
@@ -557,7 +559,7 @@ export class Application {
     const result = this.laboratory.install(this.paletteDrag.kind as SensorKind, slot.equipmentId, slot.slotId);
 
     if (!result.ok) {
-      this.notify(this.sensorToast(result.reason), 'error');
+      this.notify(this.sensorToast(result.reason), ToastKind.Error);
     }
   }
 
@@ -642,7 +644,7 @@ export class Application {
     };
   }
 
-  private template(): string {
+  private template(snapshot: ReturnType<Lab6Laboratory['snapshot']>): string {
     return `
       <div class="${APPLICATION_CLASS_NAMES.frame}">
         <section class="${APPLICATION_CLASS_NAMES.workspace}">
@@ -659,7 +661,7 @@ export class Application {
             <label class="${APPLICATION_CLASS_NAMES.gasControl}">
               <span class="${APPLICATION_CLASS_NAMES.gasControlLabel}">${APPLICATION_LABELS.gasLabel}</span>
               <select class="${APPLICATION_CLASS_NAMES.gasSelect}" data-element="gas-select">
-                ${this.gasSelectOptions()}
+                ${this.gasSelectOptions(snapshot)}
               </select>
             </label>
             <p class="${APPLICATION_CLASS_NAMES.gasHint}" data-element="gas-hint"></p>
@@ -705,11 +707,11 @@ export class Application {
   }
 
   private successToast(stage: ReturnType<Lab6Laboratory['stageValue']>): string {
-    if (stage === 'assembly') {
+    if (stage === LaboratoryStage.Assembly) {
       return APPLICATION_LABELS.assemblyConfirmedToast;
     }
 
-    if (stage === 'instruments') {
+    if (stage === LaboratoryStage.Instruments) {
       return APPLICATION_LABELS.runningStartedToast;
     }
 
@@ -717,19 +719,19 @@ export class Application {
   }
 
   private connectionToast(reason: ConnectionFailureReason): string {
-    if (reason === 'self') {
+    if (reason === ConnectionFailureReason.Self) {
       return APPLICATION_LABELS.connectionSelfError;
     }
 
-    if (reason === 'duplicate') {
+    if (reason === ConnectionFailureReason.Duplicate) {
       return APPLICATION_LABELS.connectionDuplicateError;
     }
 
-    if (reason === 'portBusy') {
+    if (reason === ConnectionFailureReason.PortBusy) {
       return APPLICATION_LABELS.connectionBusyError;
     }
 
-    if (reason === 'invalidTarget') {
+    if (reason === ConnectionFailureReason.InvalidTarget) {
       return APPLICATION_LABELS.connectionInvalidError;
     }
 
@@ -737,11 +739,11 @@ export class Application {
   }
 
   private sensorToast(reason: SensorInstallFailureReason): string {
-    if (reason === 'occupied') {
+    if (reason === SensorInstallFailureReason.Occupied) {
       return APPLICATION_LABELS.sensorOccupiedError;
     }
 
-    if (reason === 'wrongSensorType') {
+    if (reason === SensorInstallFailureReason.WrongSensorType) {
       return APPLICATION_LABELS.sensorWrongTypeError;
     }
 
@@ -749,11 +751,11 @@ export class Application {
   }
 
   private sidebarHelper(stage: ReturnType<Lab6Laboratory['stageValue']>): string {
-    if (stage === 'assembly') {
+    if (stage === LaboratoryStage.Assembly) {
       return APPLICATION_LABELS.assemblyHelper;
     }
 
-    if (stage === 'instruments') {
+    if (stage === LaboratoryStage.Instruments) {
       return APPLICATION_LABELS.instrumentsHelper;
     }
 
@@ -799,7 +801,7 @@ export class Application {
 
       if (!node) {
         node = document.createElement('div');
-        node.className = `${APPLICATION_CLASS_NAMES.toast} application__toast--entering ${toast.kind === 'error' ? APPLICATION_CLASS_NAMES.toastError : APPLICATION_CLASS_NAMES.toastSuccess}`;
+        node.className = `${APPLICATION_CLASS_NAMES.toast} application__toast--entering ${toast.kind === ToastKind.Error ? APPLICATION_CLASS_NAMES.toastError : APPLICATION_CLASS_NAMES.toastSuccess}`;
         node.textContent = toast.message;
         node.dataset.toastId = toast.id.toString();
         this.toastNodes.set(toast.id, node);
@@ -820,220 +822,30 @@ export class Application {
   }
 
   private renderResultsPreview(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
-    const records = snapshot.measurementRecords;
-    const previewRecords = records.slice(-4);
-
-    this.elements.resultsPanel.innerHTML = `
-      <section class="${APPLICATION_CLASS_NAMES.resultsSection}">
-        <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.measurementsTable}</h3>
-        <div class="${APPLICATION_CLASS_NAMES.resultsTable}" data-element="results-table">${this.resultsTableMarkup(previewRecords)}</div>
-      </section>
-      <section class="${APPLICATION_CLASS_NAMES.resultsSection}">
-        <h3 class="${APPLICATION_CLASS_NAMES.panelTitle}">${APPLICATION_LABELS.velocityChart}</h3>
-        <div class="${APPLICATION_CLASS_NAMES.chart}" data-element="results-chart">${this.resultsChartMarkup(records, true)}</div>
-      </section>
-    `;
+    this.elements.resultsPanel.innerHTML = this.results.preview(snapshot.measurementRecords);
   }
 
   private renderResultsModal(snapshot: ReturnType<Lab6Laboratory['snapshot']>): void {
     const records = snapshot.measurementRecords;
 
-    this.elements.modalResultsTable.innerHTML = this.resultsTableMarkup(records);
-    this.elements.modalResultsChart.innerHTML = this.resultsChartMarkup(records, false);
-  }
-
-  private resultsTableMarkup(records: ReturnType<Lab6Laboratory['snapshot']>['measurementRecords']): string {
-    if (records.length === 0) {
-      return `<div class="${APPLICATION_CLASS_NAMES.chartEmpty}">${APPLICATION_LABELS.emptyMeasurements}</div>`;
-    }
-
-    return `
-      <table>
-        <thead>
-          <tr>
-            <th>№</th>
-            <th>Газ</th>
-            <th>p1, бар</th>
-            <th>p2, бар</th>
-            <th>Q, л/м</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${records
-            .map(
-              (record) => `
-                <tr>
-                  <td>${record.index}</td>
-                  <td>
-                    <span class="${APPLICATION_CLASS_NAMES.gasBadge} ${this.gasBadgeClassName(record.gasModel)}">${record.gasLabel}</span>
-                  </td>
-                  <td>${record.pressureHighBar.toFixed(2)}</td>
-                  <td>${record.pressureLowBar.toFixed(2)}</td>
-                  <td>${record.flowLitersPerMinute.toFixed(2)}</td>
-                </tr>
-              `,
-            )
-            .join('')}
-        </tbody>
-      </table>
-    `;
-  }
-
-  private resultsChartMarkup(
-    records: ReturnType<Lab6Laboratory['snapshot']>['measurementRecords'],
-    compact: boolean,
-  ): string {
-    if (records.length === 0) {
-      return `<div class="${APPLICATION_CLASS_NAMES.chartEmpty}">${APPLICATION_LABELS.emptyMeasurements}</div>`;
-    }
-
-    const sorted = [...records].sort((left, right) => left.pressureRatio - right.pressureRatio);
-    const width = compact ? 320 : 640;
-    const height = compact ? 180 : 320;
-    const paddingLeft = compact ? 24 : 72;
-    const paddingRight = compact ? 24 : 28;
-    const paddingTop = compact ? 24 : 20;
-    const paddingBottom = compact ? 24 : 56;
-    const plotWidth = width - paddingLeft - paddingRight;
-    const plotHeight = height - paddingTop - paddingBottom;
-    const minX = compact ? Math.min(...sorted.map((record) => record.pressureRatio)) : 0.2;
-    const maxX = compact ? Math.max(...sorted.map((record) => record.pressureRatio)) : 0.95;
-    const minY = compact ? Math.min(...sorted.map((record) => record.velocity)) : 40;
-    const maxY = compact ? Math.max(...sorted.map((record) => record.velocity)) : 320;
-    const axisY = height - paddingBottom;
-    const axisX = paddingLeft;
-    const pointRadius = compact ? 4 : 6;
-    const strokeWidth = compact ? 2.5 : 3;
-    const labelFontSize = compact ? 11 : 14;
-    const tickFontSize = compact ? 10 : 12;
-    const xTickValues = compact ? null : [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
-    const yTickValues = compact ? null : [50, 100, 150, 200, 250, 300];
-    const xTicks = xTickValues?.length ?? 5;
-    const yTicks = yTickValues?.length ?? 5;
-    const gasPalette = this.gasPalette(records);
-    const groupedRecords = Array.from(
-      records.reduce((groups, record) => {
-        const current = groups.get(record.gasId) ?? [];
-
-        current.push(record);
-        groups.set(record.gasId, current);
-
-        return groups;
-      }, new Map<string, typeof records>()),
-    );
-
-    const coordinatesByGas = groupedRecords.map(([gasId, gasRecords]) => {
-      const gasSorted = [...gasRecords].sort((left, right) => left.pressureRatio - right.pressureRatio);
-
-      return {
-        gasId,
-        gasLabel: gasSorted[0]?.gasLabel ?? gasId,
-        gasModel: gasSorted[0]?.gasModel ?? 'real',
-        color: gasPalette.get(gasId) ?? '#1f7a6a',
-        points: gasSorted.map((record) => {
-          const clampedPressureRatio = Math.min(Math.max(record.pressureRatio, minX), maxX);
-          const clampedVelocity = Math.min(Math.max(record.velocity, minY), maxY);
-          const x = paddingLeft + ((clampedPressureRatio - minX) / Math.max(maxX - minX, 1e-6)) * plotWidth;
-          const y = axisY - ((clampedVelocity - minY) / Math.max(maxY - minY, 1e-6)) * plotHeight;
-
-          return {
-            x,
-            y,
-            record,
-          };
-        }),
-      };
-    });
-
-    const xTickMarks = Array.from({ length: xTicks }, (_, index) => {
-      const value = xTickValues ? xTickValues[index] : minX + (maxX - minX) * (xTicks === 1 ? 0 : index / (xTicks - 1));
-      const ratio = (value - minX) / Math.max(maxX - minX, 1e-6);
-      const x = axisX + plotWidth * ratio;
-
-      return `
-        <g>
-          <line x1="${x.toFixed(1)}" y1="${paddingTop}" x2="${x.toFixed(1)}" y2="${axisY}" stroke="rgba(102,123,134,0.22)" stroke-width="1" />
-          <line x1="${x.toFixed(1)}" y1="${axisY}" x2="${x.toFixed(1)}" y2="${(axisY + 6).toFixed(1)}" stroke="rgba(102,123,134,0.45)" stroke-width="1" />
-          <text x="${x.toFixed(1)}" y="${(axisY + 24).toFixed(1)}" text-anchor="middle" font-size="${tickFontSize}" fill="#667b86">${value.toFixed(1).replace('.', ',')}</text>
-        </g>
-      `;
-    }).join('');
-    const yTickMarks = Array.from({ length: yTicks }, (_, index) => {
-      const value = yTickValues ? yTickValues[index] : maxY - (maxY - minY) * (yTicks === 1 ? 0 : index / (yTicks - 1));
-      const ratio = (value - minY) / Math.max(maxY - minY, 1e-6);
-      const y = axisY - plotHeight * ratio;
-
-      return `
-        <g>
-          <line x1="${axisX}" y1="${y.toFixed(1)}" x2="${(width - paddingRight).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(102,123,134,0.22)" stroke-width="1" />
-          <line x1="${(axisX - 6).toFixed(1)}" y1="${y.toFixed(1)}" x2="${axisX}" y2="${y.toFixed(1)}" stroke="rgba(102,123,134,0.45)" stroke-width="1" />
-          <text x="${(axisX - 10).toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="${tickFontSize}" fill="#667b86">${Math.round(value)}</text>
-        </g>
-      `;
-    }).join('');
-    const legendMarkup = coordinatesByGas
-      .map(
-        ({ gasLabel, gasModel, color }) => `
-          <div class="${APPLICATION_CLASS_NAMES.chartLegendItem}">
-            <span class="${APPLICATION_CLASS_NAMES.chartLegendSwatch}" style="--legend-color: ${color}"></span>
-            <span class="${APPLICATION_CLASS_NAMES.gasBadge} ${this.gasBadgeClassName(gasModel)}">${gasLabel}</span>
-          </div>
-        `,
-      )
-      .join('');
-
-    return `
-      <div class="${APPLICATION_CLASS_NAMES.chartLegend}">${legendMarkup}</div>
-      <svg viewBox="0 0 ${width} ${height}" class="${APPLICATION_CLASS_NAMES.chart}" aria-label="${APPLICATION_LABELS.velocityChart}">
-        <line x1="${axisX}" y1="${axisY}" x2="${width - paddingRight}" y2="${axisY}" stroke="rgba(102,123,134,0.45)" stroke-width="1.5" />
-        <line x1="${axisX}" y1="${paddingTop}" x2="${axisX}" y2="${axisY}" stroke="rgba(102,123,134,0.45)" stroke-width="1.5" />
-        ${xTickMarks}
-        ${yTickMarks}
-        ${coordinatesByGas
-          .map(({ color, points }) => {
-            const polylinePoints = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
-
-            if (points.length < 2) {
-              return '';
-            }
-
-            return `<polyline fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" points="${polylinePoints}" />`;
-          })
-          .join('')}
-        ${coordinatesByGas
-          .map(
-            ({ color, points }) => points
-              .map(
-                ({ x, y, record }) => `
-                  <g>
-                    <title>${record.gasLabel}: скорость ${record.velocity.toFixed(2)} м/с; отношение ${record.pressureRatio.toFixed(3)}</title>
-                    <rect x="${(x - pointRadius).toFixed(1)}" y="${(y - pointRadius).toFixed(1)}" width="${(pointRadius * 2).toFixed(1)}" height="${(pointRadius * 2).toFixed(1)}" rx="1" fill="none" stroke="${color}" stroke-width="2" />
-                  </g>
-                `,
-              )
-              .join(''),
-          )
-          .join('')}
-        <text x="${(paddingLeft + plotWidth / 2).toFixed(1)}" y="${(height - 12).toFixed(1)}" text-anchor="middle" font-size="${labelFontSize}" fill="#111">Beta</text>
-        <text x="${compact ? 12 : 22}" y="${compact ? 18 : 24}" text-anchor="start" font-size="${labelFontSize}" fill="#111">w, м/с</text>
-      </svg>
-    `;
+    this.elements.modalResultsTable.innerHTML = this.results.table(records);
+    this.elements.modalResultsChart.innerHTML = this.results.chart(records, false);
   }
 
   private sidebarTitle(stage: ReturnType<Lab6Laboratory['stageValue']>): string {
-    if (stage === 'assembly') {
+    if (stage === LaboratoryStage.Assembly) {
       return APPLICATION_LABELS.equipmentPanel;
     }
 
-    if (stage === 'instruments') {
+    if (stage === LaboratoryStage.Instruments) {
       return APPLICATION_LABELS.sensorsPanel;
     }
 
     return APPLICATION_LABELS.runtimePanel;
   }
 
-  private gasSelectOptions(): string {
-    return LAB6_GASES
+  private gasSelectOptions(snapshot: ReturnType<Lab6Laboratory['snapshot']>): string {
+    return snapshot.gasOptions
       .map((gas) => `<option value="${gas.id}">${gas.label}</option>`)
       .join('');
   }
@@ -1045,7 +857,7 @@ export class Application {
       return '';
     }
 
-    if (gas.model === 'ideal') {
+    if (gas.model === GasModelKind.Ideal) {
       return 'Расчёт без поправки на сжимаемость: Z = 1.';
     }
 
@@ -1151,7 +963,7 @@ export class Application {
   }
 
   private visiblePortEquipmentIds(snapshot: ReturnType<Lab6Laboratory['snapshot']>): string[] {
-    if (snapshot.stage !== 'assembly') {
+    if (snapshot.stage !== LaboratoryStage.Assembly) {
       return [];
     }
 
@@ -1183,7 +995,7 @@ export class Application {
 
     const hovered = snapshot.items.find((item) => item.id === this.hoveredItemId) ?? null;
 
-    if (snapshot.stage === 'running' && hovered?.kind === 'valve') {
+    if (snapshot.stage === LaboratoryStage.Running && hovered?.kind === EquipmentKind.Valve) {
       return 'grab';
     }
 
@@ -1211,14 +1023,4 @@ export class Application {
     return target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
   }
 
-  private gasBadgeClassName(model: 'ideal' | 'real'): string {
-    return model === 'ideal' ? APPLICATION_CLASS_NAMES.gasBadgeIdeal : APPLICATION_CLASS_NAMES.gasBadgeReal;
-  }
-
-  private gasPalette(records: ReturnType<Lab6Laboratory['snapshot']>['measurementRecords']): Map<string, string> {
-    const palette = ['#1f7a6a', '#2f7ed8', '#d88608', '#8f5a06', '#7b61ff', '#c75146', '#0f9d8a', '#5f6c76'];
-    const gasIds = [...new Set(records.map((record) => record.gasId))];
-
-    return new Map(gasIds.map((gasId, index) => [gasId, palette[index % palette.length]]));
-  }
 }
